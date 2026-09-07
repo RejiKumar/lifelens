@@ -1,0 +1,243 @@
+# LifeLens - OpenSpec Configuration
+
+project:
+  name: LifeLens
+  description: AI-powered camera utility
+  version: "0.1.0"
+
+workflow:
+  phases:
+    - explore
+    - propose
+    - review
+    - apply
+    - verify
+  mandatory: true
+  allow_skip: false
+
+environments:
+  qa:
+    branch: qa
+    api_url: "https://api-qa.lifelens.app"
+    supabase_project: "lifelens-qa"
+    ad_mob_unit_ids:
+      banner: "ca-app-pub-3940256099942544/6300978111"
+      interstitial: "ca-app-pub-3940256099942544/1033173712"
+      rewarded: "ca-app-pub-3940256099942544/5224354917"
+    firebase:
+      project_id: "lifelens-qa"
+    gemini:
+      model: "gemini-1.5-flash"
+    build_type: "preview"
+  prod:
+    branch: prod
+    api_url: "https://api.lifelens.app"
+    supabase_project: "lifelens-prod"
+    ad_mob_unit_ids:
+      banner: ""
+      interstitial: ""
+      rewarded: ""
+    firebase:
+      project_id: "lifelens-prod"
+    gemini:
+      model: "gemini-1.5-flash"
+    build_type: "production"
+
+branches:
+  qa: "qa"
+  prod: "prod"
+  feature_prefix: "feat/"
+  bugfix_prefix: "fix/"
+
+quality:
+  lint:
+    mobile: "npm run lint"
+    backend: "ruff check ."
+  typecheck:
+    mobile: "npx tsc --noEmit"
+    backend: "mypy ."
+  test:
+    mobile: "npm run test"
+    backend: "pytest"
+  e2e:
+    mobile: "npm run test:e2e"
+
+# Locked defaults. All values are server-side configuration and may be
+# changed without redesigning the architecture.
+quota:
+  plans:
+    guest:
+      daily_limit: 5
+    free:
+      daily_limit: 20
+    pro:
+      daily_limit: 100
+  rewarded:
+    bonus_per_ad: 3
+    max_bonus_per_day: 10
+    expiry_hours: 24
+    cooldown_seconds: 60
+  reference: "openspec/specs/usage-quota.md"
+
+performance:
+  baseline_device: "Pixel 6a-class"
+  cold_start_target_seconds: 3
+  target_fps: 60
+  reference: "openspec/specs/product.md"
+
+security:
+  secrets:
+    never_commit: true
+    never_log:
+      - passwords
+      - access_tokens
+      - refresh_tokens
+      - oauth_secrets
+      - ai_api_keys
+  ai:
+    credentials_location: "backend_only"
+    mobile_calls_ai: false
+  auth:
+    enforcement: "server_side"
+  data:
+    images_private_by_default: true
+    no_public_image_urls: true
+    no_raw_image_logging: true
+
+architecture:
+  mobile:
+    pattern: "feature-first-clean-architecture"
+    layers:
+      - presentation
+      - domain
+      - data
+    features:
+      - onboarding
+      - auth
+      - home
+      - camera
+      - scan
+      - analysis
+      - ai-chat
+      - history
+      - monetization
+      - settings
+  backend:
+    pattern: "layered"
+    layers:
+      - api
+      - schemas
+      - services
+      - repositories
+      - models
+      - providers
+      - policies
+
+ai:
+  providers:
+    current: gemini
+    future:
+      - openai
+  architecture: "AIProvider interface"
+  requirements:
+    structured_output: true
+    schema_validation: true
+    bounded_timeout: true
+    bounded_retry: true
+    logging_no_sensitive_content: true
+    provider_error_conversion: true
+
+safety:
+  risk_levels:
+    - LOW
+    - MEDIUM
+    - HIGH
+    - CRITICAL
+  categories:
+    - electrical
+    - fire
+    - gas
+    - chemical
+    - medical
+    - structural
+    - vehicle
+    - hazardous_substances
+    - legal_financial
+  rules:
+    backend_authoritative: true
+    no_dangerous_instructions: true
+    medical_not_diagnosis: true
+    conservative_high_risk: true
+
+testing:
+  mobile:
+    - unit
+    - component
+    - api
+    - navigation
+    - accessibility
+    - e2e_critical
+  backend:
+    - unit
+    - api
+    - schema
+    - auth
+    - authorization
+    - quota
+    - entitlement
+    - safety
+    - ai_provider_mock
+
+release:
+  android:
+    first_release: true
+    build_tool: "expo_eas"
+    store: "google_play"
+    phases:
+      - internal_testing
+      - closed_testing
+      - production
+  ios:
+    supported: true
+    first_release: false
+
+monetization:
+  ads:
+    provider: "admob"
+    formats:
+      - banner
+      - interstitial
+      - rewarded
+    restrictions:
+      - no_ads_during_camera_capture
+      - no_ads_during_analysis
+      - no_ads_on_safety_warnings
+      - no_ads_on_results_view
+  subscriptions:
+    provider: "google_play_billing"
+    plans:
+      - GUEST
+      - FREE
+      - PRO
+    purchase_flow:
+      - google_play_purchase
+      - backend_verification
+      - entitlement_grant
+      - mobile_refresh
+    backend_authoritative: true
+    # DRAFT values. Revisit before Play Store launch.
+    pricing:
+      pro_monthly_usd: 4.99
+      pro_yearly_usd: 39.99
+      status: draft
+
+privacy:
+  images_private_by_default: true
+  no_public_urls: true
+  no_raw_image_logs: true
+  no_ai_key_exposure: true
+  required_pages:
+    - privacy_policy
+    - terms_of_service
+    - support
+    - account_deletion
