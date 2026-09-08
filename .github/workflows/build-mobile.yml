@@ -1,0 +1,39 @@
+name: Build Mobile App
+
+on:
+  push:
+    branches: [qa, prod]
+  workflow_dispatch:
+
+concurrency:
+  group: mobile-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  eas-build:
+    runs-on: ubuntu-latest
+    name: EAS build (${{ github.ref_name }})
+    environment: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - uses: expo/expo-github-action@v9
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+          packager: npm
+          workspace: mobile
+
+      - name: Install dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: Build app (${{ github.ref_name }})
+        working-directory: mobile
+        run: eas build --non-interactive --platform android --profile ${{ github.ref_name == 'prod' && 'production' || 'preview' }}

@@ -1,0 +1,23 @@
+#!/bin/sh
+# Pre-commit secret scan (lightweight gate, per openspec/specs/environments.md).
+# Complementary to the gitleaks CI step in ci.yml. For stronger local coverage,
+# install gitleaks (docs/deployment.md).
+set -e
+
+if [ -z "$(git diff --cached --name-only --diff-filter=ACM)" ]; then
+  exit 0
+fi
+
+tmp=$(mktemp)
+trap 'rm -f "$tmp"' EXIT
+git diff --cached | sed -n 's/^+//p' > "$tmp"
+
+pattern='(BEGIN (RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY|AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{16,}|AIza[0-9A-Za-z_-]{35}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})'
+
+if grep -nE "$pattern" "$tmp"; then
+  echo "error: potential secret detected in staged changes. Refusing to commit." >&2
+  echo "If this is a false positive, review the matched line above." >&2
+  exit 1
+fi
+
+exit 0

@@ -139,6 +139,57 @@ Never skip Explore. Never jump from user request to implementation.
 
 ---
 
+## Autonomous Spec-Driven Execution
+
+1. AGENTS.md is the highest-priority project instruction.
+2. Existing `openspec/specs/` are the baseline product and engineering requirements.
+3. An approved change under `openspec/changes/<change>/` is the implementation contract.
+4. `proposal.md` defines scope and motivation.
+5. `design.md` defines architecture and implementation decisions.
+6. `specs/` defines behavioral requirements and acceptance scenarios.
+7. `tasks.md` defines the implementation checklist.
+
+When an OpenSpec change reaches APPROVED / READY FOR APPLY:
+
+- Do not ask the user to repeat requirements already present in the change.
+- Do not ask the user which files to create when the design already determines them.
+- Do not ask the user which technologies to use when already locked by the specs/design.
+- Do not ask the user for implementation details already specified.
+- Read all applicable project instructions and change artifacts before implementation.
+- Decompose the task list internally.
+- Use subagents where useful.
+- Have subagents implement independent workstreams in parallel where safe.
+- Have the main agent reconcile all subagent work.
+- Continue through all unblocked tasks automatically.
+- Run appropriate tests and validation automatically.
+- Fix implementation failures automatically when the correction is within the approved scope.
+- Update `tasks.md` only when tasks are demonstrably complete.
+- Never mark a task complete merely because code was written.
+- Never invent requirements.
+- Never expand scope without an OpenSpec change.
+- Never implement a future feature simply because it would be convenient.
+- Stop only when:
+  a. all applicable tasks are complete,
+  b. an external dependency genuinely prevents progress,
+  c. a security/safety decision requires user input,
+  d. an architectural decision conflicts with the approved specification.
+
+If blocked:
+- finish all independent tasks first;
+- clearly identify the exact blocker;
+- do not repeatedly ask for information already available in project files;
+- ask the user only for the minimum missing decision/action.
+
+For verification:
+- run all locally available validation automatically;
+- distinguish environment-dependent tests from code failures;
+- never mark environment-dependent tests complete without executing them.
+
+The user should provide product decisions and approve/reject OpenSpec changes.
+OpenCode should handle implementation details autonomously within the approved specification.
+
+---
+
 ## Project Structure
 
 ```

@@ -1,0 +1,66 @@
+{
+  "expo": {
+    "name": "LifeLens",
+    "slug": "lifelens",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "lifelens",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "bundleIdentifier": "com.lifelens.app",
+      "icon": "./assets/expo.icon"
+    },
+    "android": {
+      "package": "com.lifelens.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "backgroundImage": "./assets/images/android-icon-background.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#208AEF",
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 76
+        }
+      ],
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow LifeLens to use your camera to identify and understand objects around you.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow LifeLens to access your photos so you can analyze images from your library."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "545f78ed-e382-409c-9776-d4c22d678189"
+      }
+    },
+    "owner": "reji_rark"
+  }
+}

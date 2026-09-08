@@ -91,7 +91,7 @@ Package managers: **npm** for JS (standard Expo workflow), **uv** for Python. No
 
 - Scaffold: `npx create-expo-app@latest mobile --template default@sdk-57` (Expo Router + TypeScript).
 - Enforce `strict: true` in `tsconfig.json`.
-- Dependencies: `eas-cli` (dev), plus Expo modules planned for feature phases (installed now as prep, not wired into UI): `expo-camera`, `expo-image-picker`, `expo-secure-store`, `expo-file-system`, `expo-blur`, `expo-splash-screen`, `expo-system-ui`, `react-native-reanimated` (respect reduced-motion per `mobile-ui.md`).
+- Dependencies: Expo modules planned for feature phases (installed now as prep, not wired into UI): `expo-camera`, `expo-image-picker`, `expo-secure-store`, `expo-file-system`, `expo-blur`, `expo-splash-screen`, `expo-system-ui`, `react-native-reanimated` (respect reduced-motion per `mobile-ui.md`). `eas-cli` is intentionally NOT a project devDependency — `expo-doctor` requires it absent; CI installs EAS CLI via `expo/expo-github-action` (`eas-version: latest`).
 - Additional modules (e.g., `expo-haptics`, `expo-navigation-bar`, local-storage libraries) are installed in the feature change that uses them, not in this foundation change.
 - `eas.json` profiles:
   - `development`: local/emulator, dev client.
