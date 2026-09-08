@@ -15,6 +15,10 @@ def _valid_analysis() -> dict[str, object]:
         "summary": "A ceramic mug used for drinking.",
         "confidence": 0.9,
         "risk_level": RiskLevel.LOW,
+        "moment": {
+            "headline": "It is intact and safe to drink from.",
+            "action": "No action needed — reuse as normal.",
+        },
         "observations": ["It is smooth and intact."],
         "actions": [],
         "warnings": [],
@@ -28,6 +32,42 @@ def test_analysis_result_accepts_bounded_values() -> None:
     assert result.title == "A mug"
     assert result.confidence == 0.9
     assert result.risk_level == RiskLevel.LOW
+
+
+def test_moment_present_and_bounded() -> None:
+    result = AnalysisResult.model_validate(_valid_analysis())
+    assert result.moment.headline == "It is intact and safe to drink from."
+    assert result.moment.action == "No action needed — reuse as normal."
+    assert len(result.moment.headline) <= 200
+    assert len(result.moment.action) <= 300
+
+
+def test_moment_requires_non_empty_headline() -> None:
+    payload = _valid_analysis()
+    payload["moment"] = {"headline": "", "action": "Do the safe thing."}
+    with pytest.raises(PydanticValidationError):
+        AnalysisResult.model_validate(payload)
+
+
+def test_moment_requires_non_empty_action() -> None:
+    payload = _valid_analysis()
+    payload["moment"] = {"headline": "Why it matters", "action": ""}
+    with pytest.raises(PydanticValidationError):
+        AnalysisResult.model_validate(payload)
+
+
+def test_oversized_moment_headline_rejected() -> None:
+    payload = _valid_analysis()
+    payload["moment"] = {"headline": "x" * 201, "action": "Do the safe thing."}
+    with pytest.raises(PydanticValidationError):
+        AnalysisResult.model_validate(payload)
+
+
+def test_oversized_moment_action_rejected() -> None:
+    payload = _valid_analysis()
+    payload["moment"] = {"headline": "Why it matters", "action": "y" * 301}
+    with pytest.raises(PydanticValidationError):
+        AnalysisResult.model_validate(payload)
 
 
 def test_oversized_observations_rejected() -> None:

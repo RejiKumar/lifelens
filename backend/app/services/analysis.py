@@ -16,10 +16,12 @@ from uuid import UUID
 
 from app.core.errors import AnalysisFailedError, NotFoundError, QuotaExceededError
 from app.core.identity import Identity
+from app.providers.base import ProviderCategory, ProviderError
 from app.repositories.scan import AnalysisRecord, AnalysisRepository, ScanRepository
 from app.repositories.storage import SignedUrlResult, StorageRepository
 from app.schemas.scan import (
     AnalysisResult,
+    Moment,
     QuotaInfo,
     RiskLevel,
     SafetyMetadata,
@@ -113,11 +115,29 @@ class AnalysisService:
             content_hash=content_hash,
         )
         if existing is not None:
-            return await self._build_response(identity, existing.id)
+            analysis = await self._analyses.get_by_scan(existing.id)
+            if analysis is not None:
+                if self._is_valid_moment(analysis):
+                    return await self._build_response(identity, existing.id)
+                record, analysis_result, safety = await self._produce(normalized)
+                existing.completed_at = datetime.now(UTC)
+                existing.storage_path = await self._storage.upload(
+                    identity.owner,
+                    existing.id,
+                    normalized.filename,
+                    normalized.data,
+                )
+                await self._analyses.update_by_scan(existing.id, record)
+                return ScanResponse(
+                    id=existing.id,
+                    status=ScanStatus.completed,
+                    created_at=_as_utc(existing.created_at),
+                    analysis=analysis_result,
+                    safety=safety,
+                    quota=QuotaInfo(),
+                )
 
-        raw = await self._analyze_with_timeout(normalized)
-
-        record, analysis_result, safety = self._coerce(raw)
+        record, analysis_result, safety = await self._produce(normalized)
 
         scan = await self._scans.create(
             user_id=None if identity.is_guest else identity.user_id,
@@ -145,6 +165,18 @@ class AnalysisService:
             quota=QuotaInfo(),
         )
 
+    async def _produce(
+        self, normalized: NormalizedImage
+    ) -> tuple[AnalysisRecord, AnalysisResult, SafetyMetadata]:
+        raw = await self._analyze_with_timeout(normalized)
+        return self._coerce(raw)
+
+    @staticmethod
+    def _is_valid_moment(analysis: object) -> bool:
+        headline = str(getattr(analysis, "moment_headline", "") or "").strip()
+        action = str(getattr(analysis, "moment_action", "") or "").strip()
+        return bool(headline) and bool(action)
+
     async def get(self, identity: Identity, scan_id: UUID) -> ScanResponse:
         return await self._build_response(identity, scan_id)
 
@@ -164,12 +196,15 @@ class AnalysisService:
                     self._provider.analyze_image(normalized.data, normalized.mime),
                     timeout=self._analysis_timeout_seconds,
                 )
+            except ProviderError as exc:
+                last_error = exc
+                if not exc.retryable:
+                    break
+                await asyncio.sleep(delay)
             except Exception as exc:  # noqa: BLE001 - map any provider failure
                 last_error = exc
                 await asyncio.sleep(delay)
-        raise AnalysisFailedError(
-            "Analysis could not be completed. Please try again."
-        ) from last_error
+        raise AnalysisFailedError(_failure_message(last_error)) from last_error
 
     @staticmethod
     def _coerce(raw: object) -> tuple[AnalysisRecord, AnalysisResult, SafetyMetadata]:
@@ -180,6 +215,10 @@ class AnalysisService:
         summary = str(getattr(raw, "summary", ""))[:2000]
         confidence = max(0.0, min(1.0, float(getattr(raw, "confidence", 0.0))))
         risk = _coerce_risk(getattr(raw, "risk_level", "LOW"))
+        headline = str(getattr(raw, "headline", "") or "")[:200].strip()
+        action = str(getattr(raw, "action", "") or "")[:300].strip()
+        if not headline or not action:
+            raise AnalysisFailedError("Analysis returned an invalid result.")
         observations = _strings(getattr(raw, "observations", []), limit=20, minimum=1)
         actions = _strings(getattr(raw, "actions", []), limit=10, minimum=0)
         warnings = _strings(getattr(raw, "warnings", []), limit=10, minimum=0)
@@ -192,6 +231,8 @@ class AnalysisService:
             summary=summary,
             confidence=confidence,
             risk_level=risk.value,
+            moment_headline=headline,
+            moment_action=action,
             observations=observations,
             actions=actions,
             warnings=warnings,
@@ -204,6 +245,7 @@ class AnalysisService:
             summary=summary,
             confidence=confidence,
             risk_level=risk,
+            moment=Moment(headline=headline, action=action),
             observations=observations,
             actions=actions,
             warnings=warnings,
@@ -222,6 +264,12 @@ class AnalysisService:
         analysis = await self._analyses.get_by_scan(scan_id)
         if analysis is None:
             raise NotFoundError("Scan has no analysis result.")
+        if not (analysis.moment_headline or "").strip() or not (
+            analysis.moment_action or ""
+        ).strip():
+            raise AnalysisFailedError(
+                "This scan is no longer available. Please try again."
+            )
 
         analysis_result = AnalysisResult(
             title=analysis.title,
@@ -229,6 +277,9 @@ class AnalysisService:
             summary=analysis.summary,
             confidence=analysis.confidence,
             risk_level=RiskLevel(analysis.risk_level),
+            moment=Moment(
+                headline=analysis.moment_headline, action=analysis.moment_action
+            ),
             observations=analysis.observations,
             actions=analysis.actions,
             warnings=analysis.warnings,
@@ -253,6 +304,37 @@ class AnalysisService:
             safety=safety,
             quota=QuotaInfo(),
         )
+
+
+def _failure_message(error: Exception | None) -> str:
+    if isinstance(error, ProviderError):
+        return _PROVIDER_MESSAGES.get(
+            error.category, "Analysis could not be completed. Please try again."
+        )
+    return "Analysis could not be completed. Please try again."
+
+
+_PROVIDER_MESSAGES: dict[ProviderCategory, str] = {
+    ProviderCategory.RATE_LIMITED: (
+        "Our AI service is busy right now. Please try again in a moment."
+    ),
+    ProviderCategory.AUTH_FAILED: (
+        "Service configuration error. Please contact support."
+    ),
+    ProviderCategory.INVALID_REQUEST: (
+        "The image could not be processed. Please try a different image."
+    ),
+    ProviderCategory.MODEL_ERROR: (
+        "Analysis failed due to an internal error. Please try again."
+    ),
+    ProviderCategory.TIMEOUT: (
+        "Analysis took too long. Please try again with a clearer image."
+    ),
+    ProviderCategory.NETWORK_ERROR: (
+        "Network error. Please check your connection and try again."
+    ),
+    ProviderCategory.UNKNOWN: "Something went wrong. Please try again.",
+}
 
 
 def _normalize_category(value: object) -> str:

@@ -52,6 +52,10 @@ class Analysis(Base):
     summary: Mapped[str] = mapped_column(Text, nullable=False)
     confidence: Mapped[float] = mapped_column(Float, nullable=False)
     risk_level: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    moment_headline: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=""
+    )
+    moment_action: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
     observations: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
     actions: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
     warnings: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)

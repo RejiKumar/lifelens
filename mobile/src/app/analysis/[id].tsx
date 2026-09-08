@@ -8,6 +8,7 @@ import { ThemedView } from '@/components/themed-view';
 import { GlassCard } from '@/components/ui/glass-card';
 import { SafetyBanner } from '@/components/ui/safety-banner';
 import { RiskBadge } from '@/components/ui/risk-badge';
+import { MomentCard } from '@/components/ui/moment-card';
 import { useScanFlow } from '@/features/scan/presentation/scan-context';
 import type { ScanResponse } from '@/features/scan/domain/types';
 import { Spacing } from '@/constants/theme';
@@ -46,7 +47,7 @@ export default function AnalysisScreen() {
     if (analysis && !announcedRef.current) {
       announcedRef.current = true;
       AccessibilityInfo.announceForAccessibility(
-        `Analysis complete. ${analysis.title}. Risk level ${analysis.risk_level}.`,
+        `Analysis complete. ${analysis.moment.headline} ${analysis.title}. Risk level ${analysis.risk_level}.`,
       );
     }
   }, [analysis]);
@@ -83,6 +84,7 @@ export default function AnalysisScreen() {
 
         {!loading && analysis && safety && (
           <View style={styles.body}>
+            <MomentCard headline={analysis.moment.headline} action={analysis.moment.action} />
             <RiskBadge riskLevel={analysis.risk_level} />
             <View accessible accessibilityLabel={`${analysis.title}. ${analysis.category}.`}>
               <ThemedText type="title">{analysis.title}</ThemedText>

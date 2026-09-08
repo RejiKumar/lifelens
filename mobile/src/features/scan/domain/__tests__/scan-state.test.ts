@@ -26,6 +26,7 @@ const sampleResult: ScanResponse = {
     warnings: [],
     when_to_seek_help: null,
     follow_up_suggestions: [],
+    moment: { headline: 'It is safe.', action: 'No immediate action required.' },
   },
   safety: {
     risk_level: 'LOW',

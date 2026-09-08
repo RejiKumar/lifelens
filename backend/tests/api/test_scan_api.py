@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from app.main import app
+from app.providers.base import RawAnalysis
 from app.providers.stub import StubProvider
 from app.schemas.scan import ScanSource
 from app.services.analysis import AnalysisService, NoopQuota
@@ -44,6 +45,8 @@ class FakeAnalysis:
     summary: str
     confidence: float
     risk_level: str
+    moment_headline: str = ""
+    moment_action: str = ""
     observations: list[str] = field(default_factory=list)
     actions: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
@@ -116,7 +119,7 @@ class FakeScanRepo:
     ) -> FakeScan | None:
         if idempotency_key is None and content_hash is None:
             return None
-        for row in self._rows:
+        for row in reversed(self._rows):
             row_owner = row.guest_session_id if is_guest else row.user_id
             if row_owner != owner:
                 continue
@@ -142,6 +145,8 @@ class FakeAnalysisRepo:
             summary=analysis.summary,
             confidence=analysis.confidence,
             risk_level=analysis.risk_level,
+            moment_headline=analysis.moment_headline,
+            moment_action=analysis.moment_action,
             observations=list(analysis.observations),
             actions=list(analysis.actions),
             warnings=list(analysis.warnings),
@@ -158,6 +163,30 @@ class FakeAnalysisRepo:
 
     async def get_by_scan(self, scan_id: uuid.UUID) -> FakeAnalysis | None:
         return self._rows.get(scan_id)
+
+    async def update_by_scan(self, scan_id: uuid.UUID, analysis: object) -> None:
+        self._rows[scan_id] = FakeAnalysis(
+            scan_id=scan_id,
+            title=analysis.title,
+            category=analysis.category,
+            summary=analysis.summary,
+            confidence=analysis.confidence,
+            risk_level=analysis.risk_level,
+            moment_headline=analysis.moment_headline,
+            moment_action=analysis.moment_action,
+            observations=list(analysis.observations),
+            actions=list(analysis.actions),
+            warnings=list(analysis.warnings),
+            when_to_seek_help=analysis.when_to_seek_help,
+            follow_up_suggestions=list(analysis.follow_up_suggestions),
+            is_medical=analysis.is_medical,
+            is_hazardous=analysis.is_hazardous,
+            is_electrical=analysis.is_electrical,
+            is_structural=analysis.is_structural,
+            is_vehicle=analysis.is_vehicle,
+            is_chemical=analysis.is_chemical,
+            is_gas=analysis.is_gas,
+        )
 
 
 class FakeStorage:
@@ -190,6 +219,27 @@ class CountingProvider:
     ) -> object:
         self.calls += 1
         return await self._inner.analyze_image(image_bytes, mime, context)
+
+
+class MomentlessProvider:
+    async def analyze_image(
+        self, image_bytes: bytes, mime: str, context: str | None = None
+    ) -> RawAnalysis:
+        raw = await StubProvider().analyze_image(image_bytes, mime, context)
+        return RawAnalysis(
+            title=raw.title,
+            category=raw.category,
+            summary=raw.summary,
+            confidence=raw.confidence,
+            risk_level=raw.risk_level,
+            headline="",
+            action="",
+            observations=raw.observations,
+            actions=raw.actions,
+            warnings=raw.warnings,
+            when_to_seek_help=raw.when_to_seek_help,
+            follow_up_suggestions=raw.follow_up_suggestions,
+        )
 
 
 def _jpeg_bytes(size: tuple[int, int] = (400, 300)) -> bytes:
@@ -243,8 +293,42 @@ def test_happy_path_scan_returns_analysis_and_safety() -> None:
         assert body["status"] == "completed"
         assert body["safety"]["risk_level"] == "LOW"
         assert body["analysis"]["title"]
+        assert body["analysis"]["moment"]["headline"]
+        assert body["analysis"]["moment"]["action"]
         assert len(body["analysis"]["observations"]) >= 1
         assert provider.calls == 1
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_get_scan_replays_persisted_moment() -> None:
+    service, *_ = _build_service()
+    from app.api.deps import get_analysis_service
+
+    app.dependency_overrides[get_analysis_service] = lambda: service
+    client = TestClient(app)
+    try:
+        created = _upload(client, _jpeg_bytes(), "guest-A", key="replay-moment-1")
+        assert created.status_code == 200
+        scan_id = created.json()["id"]
+        fetched = client.get(f"/scan/{scan_id}", headers={"x-guest-session": "guest-A"})
+        assert fetched.status_code == 200
+        assert fetched.json()["analysis"]["moment"] == created.json()["analysis"]["moment"]
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_momentless_analysis_returns_analysis_failed() -> None:
+    service, *_ = _build_service()
+    service._provider = MomentlessProvider()
+    from app.api.deps import get_analysis_service
+
+    app.dependency_overrides[get_analysis_service] = lambda: service
+    client = TestClient(app)
+    try:
+        resp = _upload(client, _jpeg_bytes(), "guest-A", key="no-moment-1")
+        assert resp.status_code == 500
+        assert resp.json()["error"]["code"] == "ANALYSIS_FAILED"
     finally:
         app.dependency_overrides.clear()
 
@@ -363,5 +447,51 @@ def test_same_content_different_session_is_new_scan() -> None:
         assert second.status_code == 200
         assert second.json()["id"] != first.json()["id"]
         assert service._provider.calls == 2
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_legacy_empty_moment_scan_is_refreshed_not_replayed() -> None:
+    service, scans, analyses, _, _ = _build_service()
+    from app.api.deps import get_analysis_service
+
+    app.dependency_overrides[get_analysis_service] = lambda: service
+    client = TestClient(app)
+    try:
+        first = _upload(client, _jpeg_bytes(), "guest-A", key="legacy-1")
+        assert first.status_code == 200
+        legacy_id = uuid.UUID(first.json()["id"])
+        legacy_analysis = analyses._rows[legacy_id]
+        legacy_analysis.moment_headline = ""
+        legacy_analysis.moment_action = ""
+
+        second = _upload(client, _jpeg_bytes(), "guest-A", key="legacy-1")
+        assert second.status_code == 200
+        assert second.json()["id"] == str(legacy_id)
+        assert service._provider.calls == 2
+        assert second.json()["analysis"]["moment"]["headline"]
+        assert second.json()["analysis"]["moment"]["action"]
+        assert analyses._rows[legacy_id].moment_headline
+        assert analyses._rows[legacy_id].moment_action
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_get_on_legacy_empty_moment_returns_analysis_failed() -> None:
+    service, *_ = _build_service()
+    from app.api.deps import get_analysis_service
+
+    app.dependency_overrides[get_analysis_service] = lambda: service
+    client = TestClient(app)
+    try:
+        created = _upload(client, _jpeg_bytes(), "guest-A", key="legacy-get-1")
+        assert created.status_code == 200
+        scan_id = uuid.UUID(created.json()["id"])
+        service._analyses._rows[scan_id].moment_headline = ""
+        service._analyses._rows[scan_id].moment_action = ""
+
+        fetched = client.get(f"/scan/{scan_id}", headers={"x-guest-session": "guest-A"})
+        assert fetched.status_code == 500
+        assert fetched.json()["error"]["code"] == "ANALYSIS_FAILED"
     finally:
         app.dependency_overrides.clear()

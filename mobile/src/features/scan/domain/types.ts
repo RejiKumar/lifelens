@@ -15,6 +15,11 @@ export interface SafetyMetadata {
   is_gas: boolean;
 }
 
+export interface Moment {
+  headline: string;
+  action: string;
+}
+
 export interface AnalysisResult {
   title: string;
   category: string;
@@ -26,6 +31,7 @@ export interface AnalysisResult {
   warnings: string[];
   when_to_seek_help: string | null;
   follow_up_suggestions: string[];
+  moment: Moment;
 }
 
 export interface QuotaInfo {

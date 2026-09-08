@@ -33,7 +33,13 @@ class Settings(BaseSettings):
     guest_ttl_days: int = 7
     signed_url_ttl_seconds: int = 300
     analysis_timeout_seconds: int = 45
-    ai_provider: str = "stub"
+    ai_provider: str = "gemini"
+    google_ai_api_key: str = ""
+    ai_model_gemini: str = "gemini-2.5-flash"
+    ai_timeout_seconds: float = 30.0
+    ai_temperature: float = 0.2
+    ai_max_tokens: int = 2048
+    ai_top_p: float = 0.95
 
 
 @lru_cache

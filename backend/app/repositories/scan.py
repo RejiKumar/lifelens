@@ -31,6 +31,8 @@ class AnalysisRecord:
     summary: str
     confidence: float
     risk_level: str
+    moment_headline: str
+    moment_action: str
     observations: list[str] = field(default_factory=list)
     actions: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
@@ -119,7 +121,8 @@ class ScanRepository:
             conditions.append(Scan.content_hash == content_hash)
         stmt = stmt.where(or_(*conditions))
         stmt = stmt.where((Scan.expires_at.is_(None)) | (Scan.expires_at >= utcnow()))
-        result = await self._session.execute(stmt.limit(1))
+        stmt = stmt.order_by(Scan.created_at.desc(), Scan.id.desc()).limit(1)
+        result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
 
 
@@ -137,6 +140,8 @@ class AnalysisRepository:
             summary=analysis.summary,
             confidence=analysis.confidence,
             risk_level=analysis.risk_level,
+            moment_headline=analysis.moment_headline,
+            moment_action=analysis.moment_action,
             observations=analysis.observations,
             actions=analysis.actions,
             warnings=analysis.warnings,
@@ -157,3 +162,28 @@ class AnalysisRepository:
     async def get_by_scan(self, scan_id: UUID) -> Analysis | None:
         result = await self._session.execute(select(Analysis).where(Analysis.scan_id == scan_id))
         return result.scalar_one_or_none()
+
+    async def update_by_scan(self, scan_id: UUID, analysis: AnalysisRecord) -> None:
+        """Overwrite the analysis row for a scan in place (legacy row refresh)."""
+        row = await self.get_by_scan(scan_id)
+        if row is None:
+            return
+        row.title = analysis.title
+        row.category = analysis.category
+        row.summary = analysis.summary
+        row.confidence = analysis.confidence
+        row.risk_level = analysis.risk_level
+        row.moment_headline = analysis.moment_headline
+        row.moment_action = analysis.moment_action
+        row.observations = analysis.observations
+        row.actions = analysis.actions
+        row.warnings = analysis.warnings
+        row.when_to_seek_help = analysis.when_to_seek_help
+        row.follow_up_suggestions = analysis.follow_up_suggestions
+        row.is_medical = analysis.is_medical
+        row.is_hazardous = analysis.is_hazardous
+        row.is_electrical = analysis.is_electrical
+        row.is_structural = analysis.is_structural
+        row.is_vehicle = analysis.is_vehicle
+        row.is_chemical = analysis.is_chemical
+        row.is_gas = analysis.is_gas

@@ -17,6 +17,7 @@ from app.core.config import Settings, get_settings
 from app.core.database import get_session_factory
 from app.core.identity import AuthVerifier, GuestVerifier, Identity
 from app.providers.base import AIProvider
+from app.providers.gemini import GeminiProvider
 from app.providers.stub import StubProvider
 from app.repositories.scan import AnalysisRepository, ScanRepository
 from app.repositories.storage import StorageRepository, build_storage_repository
@@ -47,8 +48,21 @@ async def get_identity(
 
 
 def get_provider(settings: Settings = Depends(get_settings)) -> AIProvider:
-    if settings.ai_provider == "stub" or not settings.ai_provider:
+    if not settings.ai_provider or settings.ai_provider == "stub":
         return StubProvider()
+    if settings.ai_provider == "gemini":
+        if not settings.google_ai_api_key:
+            raise RuntimeError(
+                "GOOGLE_AI_API_KEY is required when AI_PROVIDER=gemini."
+            )
+        return GeminiProvider(
+            api_key=settings.google_ai_api_key,
+            model=settings.ai_model_gemini,
+            timeout_seconds=settings.ai_timeout_seconds,
+            temperature=settings.ai_temperature,
+            max_tokens=settings.ai_max_tokens,
+            top_p=settings.ai_top_p,
+        )
     raise RuntimeError(f"Unsupported AI provider: {settings.ai_provider!r}")
 
 

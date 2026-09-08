@@ -40,6 +40,18 @@ class SafetyMetadata(BaseModel):
     is_gas: bool = False
 
 
+class Moment(BaseModel):
+    """Prioritized actionable insight: why it matters and what to do.
+
+    Produced by the same single analysis call as the rest of the result and
+    surfaced above the identification fields. Always present and non-empty on
+    a completed analysis; invalid/empty moments reject the analysis.
+    """
+
+    headline: str = Field(min_length=1, max_length=200, description="Why it matters")
+    action: str = Field(min_length=1, max_length=300, description="What to do")
+
+
 class AnalysisResult(BaseModel):
     """Validated, clamped analysis output that is safe to present."""
 
@@ -48,6 +60,7 @@ class AnalysisResult(BaseModel):
     summary: str = Field(min_length=1, max_length=2000)
     confidence: float = Field(ge=0.0, le=1.0)
     risk_level: RiskLevel
+    moment: Moment
     observations: list[str] = Field(min_length=1, max_length=20)
     actions: list[str] = Field(max_length=10)
     warnings: list[str] = Field(max_length=10)

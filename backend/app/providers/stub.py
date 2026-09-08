@@ -29,6 +29,11 @@ class StubProvider:
             ),
             confidence=0.72,
             risk_level="LOW",
+            headline="It looks intact, so it's safe to handle right now.",
+            action=(
+                "No action needed immediately — keep it as is and rescan "
+                "if it changes or worries you."
+            ),
             observations=[
                 "The object appears intact and in normal condition.",
                 "No visible damage or unusual markings were detected.",
