@@ -23,15 +23,20 @@ router = APIRouter(prefix="/scan", tags=["scan"])
 @router.post(
     "/analyze",
     response_model=ScanResponse,
-    responses={422: {"description": "Validation error"}},
+    responses={
+        400: {"description": "Validation error"},
+        413: {"description": "Payload too large"},
+    },
 )
 async def analyze_scan(
-    image: UploadFile = File(...),
+    image: UploadFile | None = File(default=None),
     idempotency_key: str = Form(...),
     source: ScanSource = Form(default=ScanSource.camera),
     identity: Identity = Depends(get_identity),
     service: AnalysisService = Depends(get_analysis_service),
 ) -> ScanResponse:
+    if image is None:
+        raise ValidationError("Image is required.")
     raw = await image.read()
     if not raw:
         raise ValidationError("Image payload is empty.")

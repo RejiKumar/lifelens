@@ -29,8 +29,16 @@ def _engine_kwargs(url: str) -> dict[str, object]:
 
 
 async def init_db(database_url: str) -> None:
-    """Create the async engine and session factory. Call once at startup."""
+    """Create the async engine and session factory. Call once at startup.
+
+    A missing or empty DATABASE_URL disables persistence: all repository
+    calls then fail fast with a clear error instead of a crash at import.
+    """
     global _engine, _session_factory
+    if not database_url:
+        _engine = None
+        _session_factory = None
+        return
     kwargs = _engine_kwargs(database_url)
     _engine = create_async_engine(database_url, **kwargs)
     _session_factory = async_sessionmaker(_engine, expire_on_commit=False)
@@ -46,3 +54,12 @@ def get_session_factory() -> async_sessionmaker[AsyncSession]:
     if _session_factory is None:
         raise RuntimeError("Database not initialized; call init_db first.")
     return _session_factory
+
+
+async def dispose_db() -> None:
+    """Dispose the async engine and clear the singleton. Safe to call anytime."""
+    global _engine, _session_factory
+    if _engine is not None:
+        await _engine.dispose()
+    _engine = None
+    _session_factory = None

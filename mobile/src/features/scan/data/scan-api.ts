@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import * as Crypto from 'expo-crypto';
+import { File as ExpoFile } from 'expo-file-system';
 
 import type { NormalizedImage, ScanResponse, ScanSource, SignedUrlResponse } from '../domain/types';
 import { type LifeLensError, toLifeLensError, errorFromEnvelope, clientError } from '../domain/errors';
@@ -135,11 +136,7 @@ async function buildFormData(input: UploadInput): Promise<FormData> {
     const file = new File([blob], input.image.name, { type: input.image.type });
     form.append('image', file);
   } else {
-    form.append('image', {
-      uri: input.image.uri,
-      name: input.image.name,
-      type: input.image.type,
-    } as unknown as Blob);
+    form.append('image', new ExpoFile(input.image.uri));
   }
   form.append('idempotency_key', input.idempotencyKey);
   form.append('source', input.source);

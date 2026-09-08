@@ -6,6 +6,8 @@ analysis, monetization) are added by their own changes.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -15,6 +17,7 @@ from fastapi.responses import JSONResponse
 from app.api.health import router as health_router
 from app.api.scan import router as scan_router
 from app.core.config import get_settings
+from app.core.database import dispose_db, init_db
 from app.core.errors import LifeLensError, QuotaExceededError
 
 settings = get_settings()
@@ -37,9 +40,16 @@ def _life_lens_error_handler(request: Request, exc: Exception) -> JSONResponse:
 
 
 def create_app() -> FastAPI:
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        await init_db(settings.database_url)
+        yield
+        await dispose_db()
+
     app = FastAPI(
         title="LifeLens API",
         version="0.1.0",
+        lifespan=lifespan,
         docs_url="/docs" if settings.app_env != "prod" else None,
         redoc_url="/redoc" if settings.app_env != "prod" else None,
         openapi_url="/openapi.json" if settings.app_env != "prod" else None,

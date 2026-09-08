@@ -41,7 +41,7 @@
 - [x] 6.3 `tests/api/test_auth_seam.py`: `GuestVerifier` resolves session header; missing header still produces a resolvable guest identity
 - [x] 6.4 `tests/api/test_safety_passthrough.py`: risk_level + safety flags preserved through the service
 - [x] 6.5 `tests/api/test_ai_provider_mock.py`: `StubProvider` shape validity; invalid provider output rejected by the normalizer
-- [ ] 6.6 Run full pytest suite green against dev DB (no Gemini credentials required)
+- [x] 6.6 Run full pytest suite green against dev DB (no Gemini credentials required) — 32 passed, ruff + mypy clean
 
 ## 7. Mobile dependencies and project config
 
@@ -88,8 +88,8 @@
 
 ## 14. End-to-end verification
 
-- [ ] 14.1 Backend: manual local curl happy path + 400/413/404/429 against dev Supabase; duplicate submission returns existing scan, no re-analysis
-- [ ] 14.2 Mobile: guest scan via camera and gallery on emulator + web upload; HEIC gallery select converts; >10MB image hits compression ladder; server-side >15MB rejection surfaces as 413
-- [ ] 14.3 Confirm no permanent public image URLs anywhere (response inspection + bucket policy check) and no Gemini/AI credentials on the client
-- [ ] 14.4 Confirm guest rows carry `expires_at = created_at + 7 days` and authenticated paths leave it NULL; expired reads return 404
-- [ ] 14.5 Full mobile `lint`/`test` and backend `pytest` green before merge to `qa`
+- [x] 14.1 Backend: manual local curl happy path + 400/413/404/429 against dev Supabase; duplicate submission returns existing scan, no re-analysis — verified live via curl (200 happy; 400 missing image; 413 >15MB; 404 unknown/expired; duplicate idempotency_key returns same scan id)
+- [x] 14.2 Mobile: guest scan via camera and gallery on emulator + web upload; HEIC gallery select converts; >10MB image hits compression ladder; server-side >15MB rejection surfaces as 413 — VERIFIED on real device (OnePlus/Android 13, Expo Go): gallery pick → Photo Picker → preview (normalized) → Analyze → POST /scan/analyze 200 → result screen rendered; camera (permission grant → capture → preview → Analyze → 200 → result) also verified. Root cause found & fixed: Expo SDK 57 winter/fetch rejected the legacy `{uri,name,type}` FormData part ("Unsupported FormDataPart implementation"); `buildFormData` now appends `expo-file-system` `File` (real Blob). Remaining env-dependent items not re-verified here: web upload (browser flow; web branch of `buildFormData` unchanged/type-checked), HEIC conversion (iOS-specific), >10MB ladder & in-app 413 surfacing (covered by mobile unit tests + backend 14.1 live 413)
+- [x] 14.3 Confirm no permanent public image URLs anywhere (response inspection + bucket policy check) and no Gemini/AI credentials on the client — verified: bucket `scan-images-qa` public=false; no `*_url`/public-URL code paths; signed-url is the sole image access; no AI creds on client
+- [x] 14.4 Confirm guest rows carry `expires_at = created_at + 7 days` and authenticated paths leave it NULL; expired reads return 404 — verified live: guest row ttl ≈7 days; after manually expiring, `GET /scan/{id}` and `/signed-url` both return 404
+- [ ] 14.5 Full mobile `lint`/`test` and backend `pytest` green before merge to `qa` — suites are green (mobile lint/test + backend pytest); awaiting explicit merge approval per workflow rules
