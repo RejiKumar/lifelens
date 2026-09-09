@@ -1,9 +1,0 @@
-[build]
-builder = "dockerfile"
-dockerfilePath = "backend/Dockerfile"
-
-[deploy]
-healthcheckPath = "/healthz"
-healthcheckTimeout = 30
-restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 3
