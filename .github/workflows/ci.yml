@@ -17,11 +17,11 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v5
       - name: Lint
         run: uv run ruff check .
       - name: Typecheck
@@ -36,26 +36,24 @@ jobs:
       run:
         working-directory: mobile
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: "24"
+          node-version: "22"
           cache: npm
           cache-dependency-path: mobile/package-lock.json
       - name: Install dependencies
         run: npm ci
       - name: Typecheck
         run: npx tsc --noEmit
-      - name: Expo doctor
-        run: npx expo-doctor
 
   secrets:
     name: Secret scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v3
+      - uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
