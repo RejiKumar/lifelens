@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile
 from app.api.deps import get_analysis_service, get_identity
 from app.core.errors import ValidationError
 from app.core.identity import Identity
-from app.schemas.scan import ScanResponse, ScanSource, SignedUrlResponse
+from app.schemas.scan import HistoryResponse, ScanResponse, ScanSource, SignedUrlResponse
 from app.services.analysis import AnalysisService
 
 router = APIRouter(prefix="/scan", tags=["scan"])
@@ -67,3 +67,13 @@ async def get_signed_url(
 ) -> SignedUrlResponse:
     result = await service.signed_url(identity, scan_id)
     return SignedUrlResponse(signed_url=result.signed_url, expires_at=result.expires_at)
+
+
+@router.get("/history", response_model=HistoryResponse)
+async def get_history(
+    identity: Identity = Depends(get_identity),
+    service: AnalysisService = Depends(get_analysis_service),
+    limit: int = 20,
+    offset: int = 0,
+) -> HistoryResponse:
+    return await service.history(identity, limit=limit, offset=offset)

@@ -21,6 +21,8 @@ from app.repositories.scan import AnalysisRecord, AnalysisRepository, ScanReposi
 from app.repositories.storage import SignedUrlResult, StorageRepository
 from app.schemas.scan import (
     AnalysisResult,
+    HistoryItem,
+    HistoryResponse,
     Moment,
     RiskLevel,
     SafetyMetadata,
@@ -331,6 +333,37 @@ class AnalysisService:
             analysis=analysis_result,
             safety=safety,
             quota=quota.to_info(),
+        )
+
+    async def history(
+        self,
+        identity: Identity,
+        *,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> HistoryResponse:
+        rows = await self._analyses.list_by_owner(
+            owner=identity.owner,
+            is_guest=identity.is_guest,
+            limit=limit,
+            offset=offset,
+        )
+        items = [
+            HistoryItem(
+                id=scan.id,
+                created_at=_as_utc(scan.created_at),
+                title=analysis.title,
+                category=analysis.category,
+                risk_level=RiskLevel(analysis.risk_level),
+                moment_headline=analysis.moment_headline,
+                source=scan.source,
+            )
+            for analysis, scan in rows
+        ]
+        return HistoryResponse(
+            items=items,
+            total=len(items) + offset,
+            has_more=len(items) == limit,
         )
 
 

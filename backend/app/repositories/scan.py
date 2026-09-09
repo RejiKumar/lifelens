@@ -125,6 +125,27 @@ class ScanRepository:
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def list_by_owner(
+        self,
+        *,
+        owner: str | None,
+        is_guest: bool,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> list[Scan]:
+        """List scans for an owner, newest first, excluding expired."""
+        stmt = select(Scan)
+        if is_guest:
+            stmt = stmt.where(Scan.guest_session_id == owner)
+        else:
+            stmt = stmt.where(Scan.user_id == owner)
+        stmt = stmt.where((Scan.expires_at.is_(None)) | (Scan.expires_at >= utcnow()))
+        stmt = stmt.where(Scan.status == "completed")
+        stmt = stmt.order_by(Scan.created_at.desc(), Scan.id.desc())
+        stmt = stmt.offset(offset).limit(limit)
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
 
 class AnalysisRepository:
     """Repository for :class:`Analysis` rows."""
@@ -207,3 +228,27 @@ class AnalysisRepository:
         row.is_vehicle = analysis.is_vehicle
         row.is_chemical = analysis.is_chemical
         row.is_gas = analysis.is_gas
+
+    async def list_by_owner(
+        self,
+        *,
+        owner: str | None,
+        is_guest: bool,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> list[tuple[Analysis, Scan]]:
+        """List analyses for an owner, newest first, excluding expired scans."""
+        stmt = (
+            select(Analysis, Scan)
+            .join(Scan, Analysis.scan_id == Scan.id)
+        )
+        if is_guest:
+            stmt = stmt.where(Scan.guest_session_id == owner)
+        else:
+            stmt = stmt.where(Scan.user_id == owner)
+        stmt = stmt.where((Scan.expires_at.is_(None)) | (Scan.expires_at >= utcnow()))
+        stmt = stmt.where(Scan.status == "completed")
+        stmt = stmt.order_by(Scan.created_at.desc(), Scan.id.desc())
+        stmt = stmt.offset(offset).limit(limit)
+        result = await self._session.execute(stmt)
+        return [tuple(row) for row in result.all()]

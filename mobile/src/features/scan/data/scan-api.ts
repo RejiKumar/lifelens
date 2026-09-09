@@ -5,6 +5,7 @@ import { File as ExpoFile } from 'expo-file-system';
 import type {
   ChatHistoryResponse,
   FollowUpResponse,
+  HistoryResponse,
   NormalizedImage,
   ScanResponse,
   ScanSource,
@@ -124,6 +125,33 @@ export async function fetchChatHistory(
     const payload = await parsePayload(response);
     if (!response.ok) throw errorFromEnvelope(response.status, payload);
     return payload as ChatHistoryResponse;
+  }, signal);
+}
+
+export interface HistoryParams {
+  limit?: number;
+  offset?: number;
+}
+
+export async function fetchScanHistory(
+  sessionId: string,
+  params: HistoryParams = {},
+  signal?: AbortSignal,
+): Promise<HistoryResponse> {
+  return retryRequest(async (reqSignal) => {
+    const query = new URLSearchParams();
+    if (params.limit != null) query.set('limit', String(params.limit));
+    if (params.offset != null) query.set('offset', String(params.offset));
+    const queryString = query.toString();
+    const url = `${API_URL}/scan/history${queryString ? `?${queryString}` : ''}`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { 'x-guest-session': sessionId },
+      signal: reqSignal,
+    });
+    const payload = await parsePayload(response);
+    if (!response.ok) throw errorFromEnvelope(response.status, payload);
+    return payload as HistoryResponse;
   }, signal);
 }
 

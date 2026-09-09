@@ -103,3 +103,23 @@ class SignedUrlResponse(BaseModel):
 
     signed_url: str
     expires_at: datetime
+
+
+class HistoryItem(BaseModel):
+    """Compact scan history entry for the list view."""
+
+    id: UUID
+    created_at: datetime
+    title: str
+    category: str
+    risk_level: RiskLevel
+    moment_headline: str
+    source: str | None = None
+
+
+class HistoryResponse(BaseModel):
+    """Paginated scan history."""
+
+    items: list[HistoryItem]
+    total: int
+    has_more: bool

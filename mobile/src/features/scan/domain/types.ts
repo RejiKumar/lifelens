@@ -89,3 +89,19 @@ export interface NormalizedImage {
   sizeBytes: number;
   source: ScanSource;
 }
+
+export interface HistoryItem {
+  id: string;
+  created_at: string;
+  title: string;
+  category: string;
+  risk_level: RiskLevel;
+  moment_headline: string;
+  source: string | null;
+}
+
+export interface HistoryResponse {
+  items: HistoryItem[];
+  total: number;
+  has_more: boolean;
+}
