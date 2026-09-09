@@ -48,6 +48,16 @@ async def analyze_scan(
     )
 
 
+@router.get("/history", response_model=HistoryResponse)
+async def get_history(
+    identity: Identity = Depends(get_identity),
+    service: AnalysisService = Depends(get_analysis_service),
+    limit: int = 20,
+    offset: int = 0,
+) -> HistoryResponse:
+    return await service.history(identity, limit=limit, offset=offset)
+
+
 @router.get("/{scan_id}", response_model=ScanResponse)
 async def get_scan(
     scan_id: UUID,
@@ -67,13 +77,3 @@ async def get_signed_url(
 ) -> SignedUrlResponse:
     result = await service.signed_url(identity, scan_id)
     return SignedUrlResponse(signed_url=result.signed_url, expires_at=result.expires_at)
-
-
-@router.get("/history", response_model=HistoryResponse)
-async def get_history(
-    identity: Identity = Depends(get_identity),
-    service: AnalysisService = Depends(get_analysis_service),
-    limit: int = 20,
-    offset: int = 0,
-) -> HistoryResponse:
-    return await service.history(identity, limit=limit, offset=offset)
