@@ -20,7 +20,8 @@ ENV PATH="/app/.venv/bin:$PATH" \
 RUN addgroup --system lifelens \
     && adduser --system --ingroup lifelens lifelens \
     && mkdir -p /app \
-    && chown -R lifelens:lifelens /app
+    && chown -R lifelens:lifelens /app \
+    && chmod +x /app/start.sh
 
 USER lifelens
 
