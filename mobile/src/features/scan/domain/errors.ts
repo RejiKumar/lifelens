@@ -2,6 +2,7 @@ export type ErrorCategory =
   | 'invalid_input'
   | 'payload_too_large'
   | 'quota_exceeded'
+  | 'limit_exceeded'
   | 'analysis_failed'
   | 'not_found'
   | 'unauthorized'
@@ -27,6 +28,7 @@ const API_CODE_CATEGORY: Record<string, ErrorCategory> = {
   VALIDATION_ERROR: 'invalid_input',
   PAYLOAD_SIZE_EXCEEDED: 'payload_too_large',
   QUOTA_EXCEEDED: 'quota_exceeded',
+  LIMIT_EXCEEDED: 'limit_exceeded',
   ANALYSIS_FAILED: 'analysis_failed',
   MEDIA_TYPE_UNSUPPORTED: 'unsupported_format',
   IMAGE_TOO_SMALL: 'invalid_input',

@@ -76,6 +76,20 @@ class RawAnalysis:
     follow_up_suggestions: list[str]
 
 
+@dataclass
+class RawFollowUp:
+    """Unvalidated follow-up answer returned by a provider.
+
+    ``risk_level`` carries the risk level the model believes applies so the
+    conversation service can assert it against the stored authoritative risk
+    metadata — an answer that downplays stored HIGH/CRITICAL risk is rejected.
+    """
+
+    answer: str
+    risk_level: str
+    follow_up_suggestions: list[str]
+
+
 class AIProvider(Protocol):
     """Interface all AI providers implement."""
 
@@ -89,5 +103,25 @@ class AIProvider(Protocol):
 
         Implementations MUST bound execution time and retries internally and
         MUST raise on failure so the caller can map to ``ANALYSIS_FAILED``.
+        """
+        ...
+
+    async def follow_up(
+        self,
+        *,
+        image_bytes: bytes,
+        mime: str,
+        analysis: dict[str, object],
+        safety: dict[str, object],
+        history: list[dict[str, str]],
+        question: str,
+    ) -> RawFollowUp:
+        """Answer a grounded follow-up question about an analysed image.
+
+        The stored normalized image is re-sent inline (never a text-only
+        answer), combined with the validated analysis payload, the
+        authoritative safety metadata, recent conversation history, and the
+        user's question. Implementations MUST bound execution time and MUST
+        raise a :class:`ProviderError` on failure.
         """
         ...

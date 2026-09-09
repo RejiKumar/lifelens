@@ -55,6 +55,10 @@ class Moment(BaseModel):
 class AnalysisResult(BaseModel):
     """Validated, clamped analysis output that is safe to present."""
 
+    id: UUID | None = Field(
+        default=None, description="Analysis id used to address follow-up conversations"
+    )
+    scan_id: UUID | None = Field(default=None, description="Owning scan id")
     title: str = Field(min_length=1, max_length=200)
     category: str = Field(min_length=1, max_length=100)
     summary: str = Field(min_length=1, max_length=2000)
@@ -69,15 +73,12 @@ class AnalysisResult(BaseModel):
 
 
 class QuotaInfo(BaseModel):
-    """Placeholder for quota state.
+    """Authoritative daily AI usage state, checked server-side."""
 
-    shape only; enforced quota arrives in a later change. Kept here so the
-    response envelope is stable and the client can display "quota nearly
-    exhausted" without trusting any client-side entitlement.
-    """
-
-    remaining: int = Field(default=0, description="Scans remaining today")
-    limit: int = Field(default=0, description="Daily scan limit")
+    used: int = Field(default=0, description="AI units used today")
+    limit: int = Field(default=0, description="Daily AI limit")
+    remaining: int = Field(default=0, description="AI units remaining today")
+    is_pro: bool = Field(default=False, description="Whether the identity is PRO")
     resets_at: datetime | None = Field(default=None, description="When the quota resets")
 
 

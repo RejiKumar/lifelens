@@ -32,6 +32,7 @@ from app.providers.base import (
     ProviderCategory,
     ProviderError,
     RawAnalysis,
+    RawFollowUp,
 )
 
 _GENERATE_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
@@ -69,6 +70,101 @@ _USER_INSTRUCTION = (
     'schema. You MUST include non-empty "headline" and "action". Do not include any '
     'text outside the JSON object.'
 )
+
+_FOLLOW_UP_SYSTEM_INSTRUCTION = (
+    "You are LifeLens, an AI visual understanding assistant. A subject was already "
+    "analysed from the attached image. The user now asks a follow-up question about "
+    "THAT SAME subject. Return only JSON matching the requested schema.\n\n"
+    "GROUNDING\n"
+    "- Answer ONLY about what is visible in the attached image together with the "
+    "recorded analysis. Never answer as a generic chatbot; every answer must be "
+    "grounded in the image and the analysis and safety metadata supplied.\n"
+    "- If the question is unrelated to the subject, briefly redirect to the subject "
+    "or decline — do not answer the unrelated topic in depth.\n\n"
+    "SAFETY (highest priority)\n"
+    "- risk_level MUST equal the risk_level given in the safety metadata. Never "
+    "downplay, contradict, or override the recorded risk.\n"
+    "- For HIGH or CRITICAL risk, use conservative language, reaffirm the severity, "
+    "and defer any risky action to a professional.\n"
+    "- Never give step-by-step instructions for electrical, gas, chemical, medical, "
+    "structural, vehicle, or hazardous-substance procedures. Refuse and direct to a "
+    "professional instead.\n"
+    "- For medical, legal, or financial subjects, frame the answer as general "
+    "information and say to consult a qualified professional.\n\n"
+    "ANSWER\n"
+    "- answer: a concise, plain-language answer to the question, grounded in the "
+    "image, non-empty, and no longer than 3 sentences.\n"
+    "- follow_up_suggestions: up to 2 contextual related questions, or leave empty."
+)
+
+_FOLLOW_UP_RESPONSE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "answer": {
+            "type": "string",
+            "description": "Concise grounded answer to the user's question",
+        },
+        "risk_level": {
+            "type": "string",
+            "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"],
+            "description": "Must equal the recorded risk_level; never downplayed",
+        },
+        "follow_up_suggestions": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Up to 2 contextual follow-up questions",
+        },
+    },
+    "required": ["answer", "risk_level", "follow_up_suggestions"],
+    "additionalProperties": False,
+}
+
+_GEMINI_TYPE_NAMES: dict[str, str] = {
+    "object": "OBJECT",
+    "array": "ARRAY",
+    "string": "STRING",
+    "number": "NUMBER",
+    "integer": "INTEGER",
+    "boolean": "BOOLEAN",
+}
+
+
+def _to_gemini_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Convert a JSON-Schema-ish dict into the Gemini REST ``responseSchema`` shape.
+
+    Gemini's ``generateContent`` REST endpoint accepts a proto-mapped schema
+    (OpenAPI-like): fields ``type/format/description/nullable/items/required/
+    properties/enum`` only, with uppercase type names. Keys such as
+    ``additionalProperties`` are rejected with a 400, and nullable unions are
+    expressed via ``nullable`` rather than ``type: ["string", "null"]``.
+    """
+
+    gemini: dict[str, Any] = {}
+    type_value = schema.get("type")
+    if isinstance(type_value, list):
+        non_null = [t for t in type_value if t != "null"]
+        gemini["type"] = (
+            _GEMINI_TYPE_NAMES.get(str(non_null[0]), "STRING") if non_null else "STRING"
+        )
+        if "null" in type_value:
+            gemini["nullable"] = True
+    elif isinstance(type_value, str) and type_value in _GEMINI_TYPE_NAMES:
+        gemini["type"] = _GEMINI_TYPE_NAMES[type_value]
+    for key in ("format", "description", "enum"):
+        if key in schema:
+            gemini[key] = schema[key]
+    if isinstance(schema.get("items"), dict):
+        gemini["items"] = _to_gemini_schema(schema["items"])
+    if isinstance(schema.get("required"), list):
+        gemini["required"] = [str(item) for item in schema["required"]]
+    properties = schema.get("properties")
+    if isinstance(properties, dict):
+        gemini["properties"] = {
+            str(key): _to_gemini_schema(value)
+            for key, value in properties.items()
+            if isinstance(value, dict)
+        }
+    return gemini
 
 
 class GeminiProvider:
@@ -175,6 +271,137 @@ class GeminiProvider:
             ) from exc
         return self._to_raw_analysis(data)
 
+    async def follow_up(
+        self,
+        *,
+        image_bytes: bytes,
+        mime: str,
+        analysis: dict[str, object],
+        safety: dict[str, object],
+        history: list[dict[str, str]],
+        question: str,
+    ) -> RawFollowUp:
+        if not self._api_key:
+            raise ProviderError(
+                ProviderCategory.AUTH_FAILED,
+                "Gemini provider is not configured with an API key.",
+            )
+        payload = self._build_follow_up_payload(
+            image_bytes=image_bytes,
+            mime=mime,
+            analysis=analysis,
+            safety=safety,
+            history=history,
+            question=question,
+        )
+        client = self._client_override or self._http
+        try:
+            response = await client.post(
+                _GENERATE_URL.format(model=self._model),
+                headers={"x-goog-api-key": self._api_key},
+                json=payload,
+                timeout=self._timeout_seconds,
+            )
+        except httpx.TimeoutException as exc:
+            raise ProviderError(
+                ProviderCategory.TIMEOUT,
+                "The AI service took too long to respond.",
+                retryable=True,
+                raw=exc,
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise ProviderError(
+                ProviderCategory.NETWORK_ERROR,
+                "Could not reach the AI service.",
+                retryable=True,
+                raw=exc,
+            ) from exc
+
+        if response.status_code == 429:
+            raise ProviderError(
+                ProviderCategory.RATE_LIMITED,
+                "The AI service is busy. Please try again shortly.",
+                retryable=True,
+            )
+        if response.status_code in (401, 403):
+            raise ProviderError(
+                ProviderCategory.AUTH_FAILED,
+                "The AI service rejected the request credentials.",
+            )
+        if response.status_code == 400:
+            raise ProviderError(
+                ProviderCategory.INVALID_REQUEST,
+                "The AI service rejected the follow-up request.",
+            )
+        if response.status_code >= 500:
+            raise ProviderError(
+                ProviderCategory.MODEL_ERROR,
+                "The AI service reported an internal error.",
+            )
+        if response.status_code != 200:
+            raise ProviderError(
+                ProviderCategory.UNKNOWN,
+                f"Unexpected AI service status {response.status_code}.",
+            )
+
+        try:
+            data = response.json()
+        except (ValueError, json.JSONDecodeError) as exc:
+            raise ProviderError(
+                ProviderCategory.MODEL_ERROR,
+                "The AI service returned a malformed response.",
+                raw=exc,
+            ) from exc
+        return self._to_raw_follow_up(data)
+
+    def _build_follow_up_payload(
+        self,
+        *,
+        image_bytes: bytes,
+        mime: str,
+        analysis: dict[str, object],
+        safety: dict[str, object],
+        history: list[dict[str, str]],
+        question: str,
+    ) -> dict[str, Any]:
+        image_b64 = base64.b64encode(image_bytes).decode("ascii")
+        if len(image_b64) > _MAX_IMAGE_B64:
+            raise ProviderError(
+                ProviderCategory.INVALID_REQUEST,
+                "The image is too large for the AI service.",
+            )
+        context = json.dumps({"analysis": analysis, "safety": safety}, default=str)[:4000]
+        transcript = "\n".join(
+            f"{msg['role']}: {msg['content'][:600]}" for msg in history[-10:]
+        ) or "No previous questions."
+        parts: list[dict[str, Any]] = [
+            {
+                "inlineData": {
+                    "mimeType": mime,
+                    "data": image_b64,
+                }
+            },
+            {"text": f"Recorded analysis and safety metadata: {context}"},
+            {"text": f"Conversation so far:\n{transcript[:2000]}"},
+            {"text": f"Question: {question}"},
+        ]
+        return {
+            "systemInstruction": {"parts": [{"text": _FOLLOW_UP_SYSTEM_INSTRUCTION}]},
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": parts,
+                }
+            ],
+            "generationConfig": {
+                "temperature": self._temperature,
+                "topP": self._top_p,
+                "maxOutputTokens": self._max_tokens,
+                "responseMimeType": "application/json",
+                "responseSchema": _to_gemini_schema(_FOLLOW_UP_RESPONSE_SCHEMA),
+            },
+        }
+
     def _build_payload(
         self, image_bytes: bytes, mime: str, context: str | None
     ) -> dict[str, Any]:
@@ -208,7 +435,7 @@ class GeminiProvider:
                 "topP": self._top_p,
                 "maxOutputTokens": self._max_tokens,
                 "responseMimeType": "application/json",
-                "responseSchema": _RESPONSE_SCHEMA,
+                "responseSchema": _to_gemini_schema(_RESPONSE_SCHEMA),
             },
         }
 
@@ -245,6 +472,33 @@ class GeminiProvider:
             actions=_as_text_list(parsed.get("actions")),
             warnings=_as_text_list(parsed.get("warnings")),
             when_to_seek_help=_as_optional_text(parsed.get("when_to_seek_help")),
+            follow_up_suggestions=_as_text_list(parsed.get("follow_up_suggestions")),
+        )
+
+    @staticmethod
+    def _to_raw_follow_up(data: Mapping[str, Any]) -> RawFollowUp:
+        text = _extract_text(data)
+        if text is None:
+            raise ProviderError(
+                ProviderCategory.MODEL_ERROR,
+                "The AI service returned no follow-up content.",
+            )
+        try:
+            parsed = json.loads(text)
+        except (ValueError, json.JSONDecodeError) as exc:
+            raise ProviderError(
+                ProviderCategory.MODEL_ERROR,
+                "The AI service returned unparsable structured output.",
+                raw=exc,
+            ) from exc
+        if not isinstance(parsed, dict):
+            raise ProviderError(
+                ProviderCategory.MODEL_ERROR,
+                "The AI service returned an invalid follow-up object.",
+            )
+        return RawFollowUp(
+            answer=_as_text(parsed.get("answer")),
+            risk_level=_as_text(parsed.get("risk_level")),
             follow_up_suggestions=_as_text_list(parsed.get("follow_up_suggestions")),
         )
 

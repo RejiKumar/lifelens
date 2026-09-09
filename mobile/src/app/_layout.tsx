@@ -32,7 +32,7 @@ export default function RootLayout() {
             name="scan"
             options={{ presentation: 'fullScreenModal', headerShown: false }}
           />
-          <Stack.Screen name="analysis/[id]" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="analysis/[id]" options={{ presentation: 'modal', headerShown: false }} />
         </Stack>
         <StatusBar style="auto" />
       </ScanProvider>

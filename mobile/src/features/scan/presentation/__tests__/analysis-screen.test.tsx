@@ -1,12 +1,15 @@
-import { render } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import AnalysisScreen from '@/app/analysis/[id]';
-import type { ScanResponse } from '@/features/scan/domain/types';
+import type { ChatMessage, ScanResponse } from '@/features/scan/domain/types';
 import type { ScanFlowState } from '@/features/scan/domain/scan-state';
 import { useScanFlow } from '@/features/scan/presentation/scan-context';
+import { useConversation } from '@/features/scan/presentation/use-conversation';
 
 const baseAnalysis = {
+  id: 'analysis-1',
+  scan_id: 'scan-1',
   title: 'A thing',
   category: 'object',
   summary: 'It is a thing.',
@@ -16,7 +19,7 @@ const baseAnalysis = {
   actions: [],
   warnings: [],
   when_to_seek_help: null,
-  follow_up_suggestions: [],
+  follow_up_suggestions: ['What is this made of?', 'How do I clean it?'],
   moment: { headline: 'It is safe.', action: 'No immediate action required.' },
 };
 
@@ -62,7 +65,12 @@ jest.mock('@/features/scan/presentation/scan-context', () => ({
   useScanFlow: jest.fn(),
 }));
 
+jest.mock('@/features/scan/presentation/use-conversation', () => ({
+  useConversation: jest.fn(),
+}));
+
 const mockedUseScanFlow = jest.mocked(useScanFlow);
+const mockedUseConversation = jest.mocked(useConversation);
 
 const stateFor = (result: ScanResponse): ScanFlowState => ({
   stage: 'success',
@@ -83,6 +91,27 @@ const contextValue = (result: ScanResponse) => ({
   reset: jest.fn(),
   fetchResult: jest.fn(),
 });
+
+let onSend: (question: string) => void = jest.fn();
+let onRetry: () => void = jest.fn();
+
+const conversationValue = (overrides: Partial<ReturnType<typeof useConversation>> = {}) => {
+  const defaults: ReturnType<typeof useConversation> = {
+    messages: [],
+    status: 'ready',
+    lastError: null,
+    errorKind: null,
+    remainingCapacity: 8,
+    quota: null,
+    send: jest.fn(async (question: string) => onSend(question)),
+    retry: jest.fn(async () => onRetry()),
+    reload: jest.fn(async () => undefined),
+  };
+  return { ...defaults, ...overrides };
+};
+
+onSend = jest.fn();
+onRetry = jest.fn();
 
 const renderScreen = () =>
   render(
@@ -108,6 +137,7 @@ function riskPosition(json: unknown): number {
 describe('AnalysisScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockedUseConversation.mockReturnValue(conversationValue());
   });
 
   it('renders the moment above the risk badge for LOW risk', async () => {
@@ -127,5 +157,90 @@ describe('AnalysisScreen', () => {
     expect(getByLabelText(/Moment: Handle with caution/i)).toBeTruthy();
     expect(getByText('High risk')).toBeTruthy();
     expect(getByText(/High risk — Use caution/i)).toBeTruthy();
+  });
+
+  it('renders exactly one labeled back control and no native route text', async () => {
+    mockedUseScanFlow.mockReturnValue(contextValue(lowResult));
+    const { getByLabelText, queryByText } = await renderScreen();
+    expect(getByLabelText('Go back')).toBeTruthy();
+    expect(queryByText('analysis/[id]')).toBeNull();
+    expect(queryByText(/analysis\/\[/)).toBeNull();
+  });
+
+  it('shows Ask LifeLens entry with suggestion chips that submit the question', async () => {
+    mockedUseScanFlow.mockReturnValue(contextValue(lowResult));
+    mockedUseConversation.mockReturnValue(conversationValue());
+    const { getByLabelText, getByText } = await renderScreen();
+    expect(getByText('Ask about what you see')).toBeTruthy();
+    fireEvent.press(getByLabelText(/Ask: What is this made of?/i));
+    expect(onSend).toHaveBeenCalledWith('What is this made of?');
+  });
+
+  it('renders the conversation thread in order instead of the entry card', async () => {
+    mockedUseScanFlow.mockReturnValue(contextValue(lowResult));
+    const messages: ChatMessage[] = [
+      { id: 'm1', role: 'user', content: 'First question', created_at: '2026-01-01T00:00:00Z' },
+      {
+        id: 'm2',
+        role: 'assistant',
+        content: 'First answer',
+        created_at: '2026-01-01T00:00:01Z',
+      },
+      { id: 'm3', role: 'user', content: 'Second question', created_at: '2026-01-01T00:00:02Z' },
+      {
+        id: 'm4',
+        role: 'assistant',
+        content: 'Second answer',
+        created_at: '2026-01-01T00:00:03Z',
+      },
+    ];
+    mockedUseConversation.mockReturnValue(
+      conversationValue({ messages, status: 'ready', remainingCapacity: 6 }),
+    );
+    const { getByText, queryByText } = await renderScreen();
+    expect(getByText('First question')).toBeTruthy();
+    expect(getByText('First answer')).toBeTruthy();
+    expect(getByText('Second question')).toBeTruthy();
+    expect(getByText('Second answer')).toBeTruthy();
+    expect(queryByText('Ask about what you see')).toBeNull();
+  });
+
+  it('shows an inline retry when a follow-up fails and re-sends on tap', async () => {
+    mockedUseScanFlow.mockReturnValue(contextValue(lowResult));
+    mockedUseConversation.mockReturnValue(
+      conversationValue({
+        status: 'error',
+        errorKind: 'send',
+        lastError: {
+          category: 'analysis_failed',
+          code: 'ANALYSIS_FAILED',
+          message: 'The answer could not be generated. Please try again.',
+          details: null,
+          retryable: true,
+          status: 500,
+        },
+        messages: [],
+      }),
+    );
+    const { getByText, getByLabelText } = await renderScreen();
+    expect(getByText(/The answer could not be generated/i)).toBeTruthy();
+    fireEvent.press(getByLabelText('Try again'));
+    expect(onRetry).toHaveBeenCalled();
+  });
+
+  it('composer submits the typed question to the conversation', async () => {
+    mockedUseScanFlow.mockReturnValue(contextValue(lowResult));
+    const { getByLabelText, getByPlaceholderText } = await renderScreen();
+    await fireEvent.changeText(getByPlaceholderText('Ask about what you just scanned…'), 'Tell me more');
+    await fireEvent.press(getByLabelText('Send question'));
+    expect(onSend).toHaveBeenCalledWith('Tell me more');
+  });
+
+  it('hides the composer when no analysis id is available', async () => {
+    mockedUseScanFlow.mockReturnValue(
+      contextValue({ ...lowResult, analysis: { ...baseAnalysis, id: null } }),
+    );
+    const { queryByLabelText } = await renderScreen();
+    expect(queryByLabelText('Send question')).toBeNull();
   });
 });

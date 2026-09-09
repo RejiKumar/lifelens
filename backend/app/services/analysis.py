@@ -22,7 +22,6 @@ from app.repositories.storage import SignedUrlResult, StorageRepository
 from app.schemas.scan import (
     AnalysisResult,
     Moment,
-    QuotaInfo,
     RiskLevel,
     SafetyMetadata,
     ScanResponse,
@@ -30,6 +29,7 @@ from app.schemas.scan import (
     ScanStatus,
 )
 from app.services.image_utils import NormalizedImage, normalize_image
+from app.services.quota import QuotaState
 
 _RETRY_BACKOFF = [1.0, 2.0, 4.0]
 
@@ -42,15 +42,11 @@ class AI(Protocol):
 
 
 class QuotaContext(Protocol):
-    def is_exhausted(self, identity: Identity) -> bool:
+    async def check(self, identity: Identity) -> QuotaState:
         ...
 
-
-class NoopQuota:
-    """MVP quota is never exhausted. Enforcement lands in a later change."""
-
-    def is_exhausted(self, identity: Identity) -> bool:
-        return False
+    async def commit(self, identity: Identity) -> bool:
+        ...
 
 
 class AnalysisService:
@@ -91,10 +87,15 @@ class AnalysisService:
         idempotency_key: str,
         source: ScanSource,
     ) -> ScanResponse:
-        if self._quota.is_exhausted(identity):
+        quota_state = await self._quota.check(identity)
+        if quota_state.is_exhausted:
             raise QuotaExceededError(
-                "Your daily scan limit has been reached. Please try again tomorrow.",
-                quota={"remaining": 0, "limit": 0},
+                "Your daily AI limit has been reached. Please try again tomorrow.",
+                quota={
+                    "remaining": 0,
+                    "limit": quota_state.limit,
+                    "resets_at": quota_state.resets_at.isoformat(),
+                },
             )
 
         normalized = normalize_image(
@@ -118,8 +119,12 @@ class AnalysisService:
             analysis = await self._analyses.get_by_scan(existing.id)
             if analysis is not None:
                 if self._is_valid_moment(analysis):
-                    return await self._build_response(identity, existing.id)
-                record, analysis_result, safety = await self._produce(normalized)
+                    return await self._build_response(
+                        identity, existing.id, quota=quota_state
+                    )
+                record, analysis_result, safety = await self._run_analysis(
+                    identity, normalized
+                )
                 existing.completed_at = datetime.now(UTC)
                 existing.storage_path = await self._storage.upload(
                     identity.owner,
@@ -128,16 +133,14 @@ class AnalysisService:
                     normalized.data,
                 )
                 await self._analyses.update_by_scan(existing.id, record)
-                return ScanResponse(
-                    id=existing.id,
-                    status=ScanStatus.completed,
-                    created_at=_as_utc(existing.created_at),
-                    analysis=analysis_result,
+                return await self._build_response(
+                    identity,
+                    existing.id,
+                    analysis_result=analysis_result,
                     safety=safety,
-                    quota=QuotaInfo(),
                 )
 
-        record, analysis_result, safety = await self._produce(normalized)
+        record, analysis_result, safety = await self._run_analysis(identity, normalized)
 
         scan = await self._scans.create(
             user_id=None if identity.is_guest else identity.user_id,
@@ -154,7 +157,11 @@ class AnalysisService:
         )
         scan.storage_path = storage_path
 
-        await self._analyses.create(scan.id, record)
+        persisted = await self._analyses.create(scan.id, record)
+        analysis_result.id = persisted.id
+        analysis_result.scan_id = scan.id
+
+        quota_state = await self._quota.check(identity)
 
         return ScanResponse(
             id=scan.id,
@@ -162,8 +169,15 @@ class AnalysisService:
             created_at=_as_utc(scan.created_at),
             analysis=analysis_result,
             safety=safety,
-            quota=QuotaInfo(),
+            quota=quota_state.to_info(),
         )
+
+    async def _run_analysis(
+        self, identity: Identity, normalized: NormalizedImage
+    ) -> tuple[AnalysisRecord, AnalysisResult, SafetyMetadata]:
+        record, analysis_result, safety = await self._produce(normalized)
+        await self._quota.commit(identity)
+        return record, analysis_result, safety
 
     async def _produce(
         self, normalized: NormalizedImage
@@ -255,7 +269,15 @@ class AnalysisService:
         safety = SafetyMetadata(risk_level=risk)
         return record, analysis_result, safety
 
-    async def _build_response(self, identity: Identity, scan_id: UUID) -> ScanResponse:
+    async def _build_response(
+        self,
+        identity: Identity,
+        scan_id: UUID,
+        *,
+        quota: QuotaState | None = None,
+        analysis_result: AnalysisResult | None = None,
+        safety: SafetyMetadata | None = None,
+    ) -> ScanResponse:
         scan = await self._scans.get_by_id(
             scan_id, owner=identity.owner, is_guest=identity.is_guest
         )
@@ -271,38 +293,44 @@ class AnalysisService:
                 "This scan is no longer available. Please try again."
             )
 
-        analysis_result = AnalysisResult(
-            title=analysis.title,
-            category=analysis.category,
-            summary=analysis.summary,
-            confidence=analysis.confidence,
-            risk_level=RiskLevel(analysis.risk_level),
-            moment=Moment(
-                headline=analysis.moment_headline, action=analysis.moment_action
-            ),
-            observations=analysis.observations,
-            actions=analysis.actions,
-            warnings=analysis.warnings,
-            when_to_seek_help=analysis.when_to_seek_help,
-            follow_up_suggestions=analysis.follow_up_suggestions,
-        )
-        safety = SafetyMetadata(
-            risk_level=RiskLevel(analysis.risk_level),
-            is_medical=analysis.is_medical,
-            is_hazardous=analysis.is_hazardous,
-            is_electrical=analysis.is_electrical,
-            is_structural=analysis.is_structural,
-            is_vehicle=analysis.is_vehicle,
-            is_chemical=analysis.is_chemical,
-            is_gas=analysis.is_gas,
-        )
+        if analysis_result is None:
+            analysis_result = AnalysisResult(
+                title=analysis.title,
+                category=analysis.category,
+                summary=analysis.summary,
+                confidence=analysis.confidence,
+                risk_level=RiskLevel(analysis.risk_level),
+                moment=Moment(
+                    headline=analysis.moment_headline, action=analysis.moment_action
+                ),
+                observations=analysis.observations,
+                actions=analysis.actions,
+                warnings=analysis.warnings,
+                when_to_seek_help=analysis.when_to_seek_help,
+                follow_up_suggestions=analysis.follow_up_suggestions,
+            )
+            analysis_result.id = analysis.id
+            analysis_result.scan_id = scan.id
+        if safety is None:
+            safety = SafetyMetadata(
+                risk_level=RiskLevel(analysis.risk_level),
+                is_medical=analysis.is_medical,
+                is_hazardous=analysis.is_hazardous,
+                is_electrical=analysis.is_electrical,
+                is_structural=analysis.is_structural,
+                is_vehicle=analysis.is_vehicle,
+                is_chemical=analysis.is_chemical,
+                is_gas=analysis.is_gas,
+            )
+        if quota is None:
+            quota = await self._quota.check(identity)
         return ScanResponse(
             id=scan.id,
             status=ScanStatus(scan.status),
             created_at=_as_utc(scan.created_at),
             analysis=analysis_result,
             safety=safety,
-            quota=QuotaInfo(),
+            quota=quota.to_info(),
         )
 
 

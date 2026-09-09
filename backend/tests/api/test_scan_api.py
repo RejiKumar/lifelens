@@ -19,7 +19,28 @@ from app.main import app
 from app.providers.base import RawAnalysis
 from app.providers.stub import StubProvider
 from app.schemas.scan import ScanSource
-from app.services.analysis import AnalysisService, NoopQuota
+from app.services.analysis import AnalysisService
+from app.services.quota import QuotaState
+
+
+class FakeQuota:
+    def __init__(self, *, used: int = 0, limit: int = 100) -> None:
+        self._used = used
+        self._limit = limit
+        self.commits = 0
+
+    async def check(self, identity: object) -> QuotaState:
+        return QuotaState(
+            used=self._used,
+            limit=self._limit,
+            is_pro=False,
+            resets_at=datetime.now(UTC) + timedelta(days=1),
+        )
+
+    async def commit(self, identity: object) -> bool:
+        self._used += 1
+        self.commits += 1
+        return True
 
 
 @dataclass
@@ -39,6 +60,7 @@ class FakeScan:
 
 @dataclass
 class FakeAnalysis:
+    id: uuid.UUID
     scan_id: uuid.UUID
     title: str
     category: str
@@ -137,8 +159,14 @@ class FakeAnalysisRepo:
     def __init__(self) -> None:
         self._rows: dict[uuid.UUID, FakeAnalysis] = {}
 
-    async def create(self, scan_id: uuid.UUID, analysis: object) -> None:
-        self._rows[scan_id] = FakeAnalysis(
+    async def create(self, scan_id: uuid.UUID, analysis: object) -> FakeAnalysis:
+        row = self._new_row(scan_id, analysis)
+        self._rows[scan_id] = row
+        return row
+
+    def _new_row(self, scan_id: uuid.UUID, analysis: object) -> FakeAnalysis:
+        return FakeAnalysis(
+            id=uuid.uuid4(),
             scan_id=scan_id,
             title=analysis.title,
             category=analysis.category,
@@ -165,37 +193,48 @@ class FakeAnalysisRepo:
         return self._rows.get(scan_id)
 
     async def update_by_scan(self, scan_id: uuid.UUID, analysis: object) -> None:
-        self._rows[scan_id] = FakeAnalysis(
-            scan_id=scan_id,
-            title=analysis.title,
-            category=analysis.category,
-            summary=analysis.summary,
-            confidence=analysis.confidence,
-            risk_level=analysis.risk_level,
-            moment_headline=analysis.moment_headline,
-            moment_action=analysis.moment_action,
-            observations=list(analysis.observations),
-            actions=list(analysis.actions),
-            warnings=list(analysis.warnings),
-            when_to_seek_help=analysis.when_to_seek_help,
-            follow_up_suggestions=list(analysis.follow_up_suggestions),
-            is_medical=analysis.is_medical,
-            is_hazardous=analysis.is_hazardous,
-            is_electrical=analysis.is_electrical,
-            is_structural=analysis.is_structural,
-            is_vehicle=analysis.is_vehicle,
-            is_chemical=analysis.is_chemical,
-            is_gas=analysis.is_gas,
-        )
+        row = self._rows.get(scan_id)
+        if row is None:
+            row = self._new_row(scan_id, analysis)
+        else:
+            row.title = analysis.title
+            row.category = analysis.category
+            row.summary = analysis.summary
+            row.confidence = analysis.confidence
+            row.risk_level = analysis.risk_level
+            row.moment_headline = analysis.moment_headline
+            row.moment_action = analysis.moment_action
+            row.observations = list(analysis.observations)
+            row.actions = list(analysis.actions)
+            row.warnings = list(analysis.warnings)
+            row.when_to_seek_help = analysis.when_to_seek_help
+            row.follow_up_suggestions = list(analysis.follow_up_suggestions)
+            row.is_medical = analysis.is_medical
+            row.is_hazardous = analysis.is_hazardous
+            row.is_electrical = analysis.is_electrical
+            row.is_structural = analysis.is_structural
+            row.is_vehicle = analysis.is_vehicle
+            row.is_chemical = analysis.is_chemical
+            row.is_gas = analysis.is_gas
+        self._rows[scan_id] = row
 
 
 class FakeStorage:
     def __init__(self) -> None:
         self.uploads: list[tuple[str, uuid.UUID, str]] = []
+        self._contents: dict[str, bytes] = {}
 
     async def upload(self, owner: str, scan_id: uuid.UUID, filename: str, data: bytes) -> str:
         self.uploads.append((owner, scan_id, filename))
-        return f"{owner}/{scan_id}/{filename}"
+        path = f"{owner}/{scan_id}/{filename}"
+        self._contents[path] = data
+        return path
+
+    async def read(self, path: str) -> tuple[bytes, str] | None:
+        data = self._contents.get(path)
+        if data is None:
+            return None
+        return data, "image/jpeg"
 
     async def create_signed_url(self, path: str, ttl_seconds: int) -> object:
         from app.repositories.storage import SignedUrlResult
@@ -259,7 +298,7 @@ def _build_service(
         analyses=analyses,
         storage=storage,
         provider=provider,
-        quota=NoopQuota(),
+        quota=FakeQuota(),
         max_upload_bytes=15 * 1024 * 1024,
         max_input_dimension=8192,
         min_input_dimension=200,
@@ -293,9 +332,14 @@ def test_happy_path_scan_returns_analysis_and_safety() -> None:
         assert body["status"] == "completed"
         assert body["safety"]["risk_level"] == "LOW"
         assert body["analysis"]["title"]
+        assert body["analysis"]["id"]
+        assert body["analysis"]["scan_id"] == body["id"]
         assert body["analysis"]["moment"]["headline"]
         assert body["analysis"]["moment"]["action"]
         assert len(body["analysis"]["observations"]) >= 1
+        assert body["quota"]["used"] == 1
+        assert body["quota"]["limit"] == 100
+        assert body["quota"]["is_pro"] is False
         assert provider.calls == 1
     finally:
         app.dependency_overrides.clear()

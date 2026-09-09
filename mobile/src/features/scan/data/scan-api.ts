@@ -2,13 +2,20 @@ import { Platform } from 'react-native';
 import * as Crypto from 'expo-crypto';
 import { File as ExpoFile } from 'expo-file-system';
 
-import type { NormalizedImage, ScanResponse, ScanSource, SignedUrlResponse } from '../domain/types';
+import type {
+  ChatHistoryResponse,
+  FollowUpResponse,
+  NormalizedImage,
+  ScanResponse,
+  ScanSource,
+  SignedUrlResponse,
+} from '../domain/types';
 import { type LifeLensError, toLifeLensError, errorFromEnvelope, clientError } from '../domain/errors';
 
 const DEFAULT_API_URL = 'http://localhost:8000';
 export const API_URL = (process.env.EXPO_PUBLIC_API_URL?.replace(/\/+$/, '') || DEFAULT_API_URL);
 
-const REQUEST_TIMEOUT_MS = 60_000;
+const REQUEST_TIMEOUT_MS = 120_000;
 const RETRY_DELAYS_MS = [1000, 2000, 4000] as const;
 
 export interface UploadInput {
@@ -66,6 +73,58 @@ export async function fetchSignedUrlById(
   const payload = await parsePayload(response);
   if (!response.ok) throw errorFromEnvelope(response.status, payload);
   return payload as SignedUrlResponse;
+}
+
+export async function postFollowUp(
+  analysisId: string,
+  question: string,
+  sessionId: string,
+  signal?: AbortSignal,
+): Promise<FollowUpResponse> {
+  return retryRequest(async (reqSignal) => {
+    const response = await fetch(
+      `${API_URL}/analysis/${encodeURIComponent(analysisId)}/follow-up`,
+      {
+        method: 'POST',
+        headers: { 'x-guest-session': sessionId, 'content-type': 'application/json' },
+        body: JSON.stringify({ question }),
+        signal: reqSignal,
+      },
+    );
+    const payload = await parsePayload(response);
+    if (!response.ok) throw errorFromEnvelope(response.status, payload);
+    return payload as FollowUpResponse;
+  }, signal);
+}
+
+export interface ChatHistoryParams {
+  limit?: number;
+  cursor?: string | null;
+}
+
+export async function fetchChatHistory(
+  analysisId: string,
+  sessionId: string,
+  params: ChatHistoryParams = {},
+  signal?: AbortSignal,
+): Promise<ChatHistoryResponse> {
+  return retryRequest(async (reqSignal) => {
+    const query = new URLSearchParams();
+    if (params.limit != null) query.set('limit', String(params.limit));
+    if (params.cursor) query.set('cursor', params.cursor);
+    const queryString = query.toString();
+    const url = `${API_URL}/analysis/${encodeURIComponent(analysisId)}/chat-history${
+      queryString ? `?${queryString}` : ''
+    }`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { 'x-guest-session': sessionId },
+      signal: reqSignal,
+    });
+    const payload = await parsePayload(response);
+    if (!response.ok) throw errorFromEnvelope(response.status, payload);
+    return payload as ChatHistoryResponse;
+  }, signal);
 }
 
 async function retryRequest<T>(

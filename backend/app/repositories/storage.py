@@ -18,6 +18,18 @@ from supabase._async.client import AsyncClient
 
 _FILENAME_RE = re.compile(r"^[a-z0-9_]+\.(jpg|jpeg|png|webp)$")
 
+_FILENAME_MIME = {
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "png": "image/png",
+    "webp": "image/webp",
+}
+
+
+def _mime_for_path(path: str) -> str | None:
+    extension = path.rsplit(".", 1)[-1].lower() if "." in path else ""
+    return _FILENAME_MIME.get(extension)
+
 
 class StorageRepository:
     """Thin wrapper over a Supabase Storage bucket for scan objects."""
@@ -47,6 +59,22 @@ class StorageRepository:
         path = self.build_path(owner, scan_id, filename)
         await self._bucket_proxy().upload(path, data)
         return path
+
+    async def read(self, path: str) -> tuple[bytes, str] | None:
+        """Read a stored object back with its inferred media type.
+
+        Returns ``None`` when the object is missing or unreadable so callers
+        can map to a structured not-available error instead of a text-only
+        fallback.
+        """
+        mime = _mime_for_path(path)
+        if mime is None:
+            return None
+        try:
+            response = await self._bucket_proxy().download(path)
+            return response, mime
+        except Exception:  # noqa: BLE001 - storage outages map to not-found
+            return None
 
     async def create_signed_url(self, path: str, ttl_seconds: int) -> SignedUrlResult:
         response = await self._bucket_proxy().create_signed_url(path, expires_in=ttl_seconds)

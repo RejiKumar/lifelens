@@ -1,9 +1,9 @@
 # AI Provider Architecture Specification
 
 **Module:** AI Provider
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Active
-**Last Updated:** 2026-09-07
+**Last Updated:** 2026-09-09
 
 ---
 
@@ -80,7 +80,7 @@ class AIProvider(ABC):
 | Field         | Type     | Description                                    |
 |--------------|----------|------------------------------------------------|
 | `content`    | dict     | Parsed JSON matching the requested schema      |
-| `model`      | string   | Model identifier used (e.g., "gemini-1.5-flash") |
+| `model`      | string   | Model identifier used (e.g., "gemini-3.6-flash") |
 | `provider`   | string   | Provider name (e.g., "gemini")                 |
 | `latency_ms` | int      | Round-trip time in milliseconds                |
 | `token_usage`| dict     | Optional token counts (input/output)           |
@@ -99,7 +99,7 @@ class AIProvider(ABC):
 
 | Parameter         | Default Value        |
 |------------------|---------------------|
-| Model             | `gemini-1.5-flash`  |
+| Model             | `gemini-3.6-flash`  |
 | Temperature       | 0.2                 |
 | Max output tokens | 2048                |
 | Top-P             | 0.95                |
@@ -301,7 +301,7 @@ All provider interactions are logged with a structured format:
   "level": "info",
   "event": "ai_provider_call",
   "provider": "gemini",
-  "model": "gemini-1.5-flash",
+  "model": "gemini-3.6-flash",
   "latency_ms": 3200,
   "success": true,
   "category": null,
@@ -353,7 +353,7 @@ All provider interactions are logged with a structured format:
 | Variable          | Default   | Values                    | Description                    |
 |------------------|-----------|---------------------------|--------------------------------|
 | `AI_PROVIDER`   | `gemini`  | `gemini`, `openai`        | Active AI provider             |
-| `AI_MODEL_GEMINI`| `gemini-1.5-flash` | Any Gemini model   | Gemini model override          |
+| `AI_MODEL_GEMINI`| `gemini-3.6-flash` | Any Gemini model   | Gemini model override          |
 | `AI_MODEL_OPENAI`| `gpt-4o`  | Any OpenAI vision model   | OpenAI model override          |
 
 ### 9.2 Performance Tuning
@@ -390,3 +390,35 @@ All provider interactions are logged with a structured format:
 - Track average latency per provider per hour
 - Track error rate per error category per hour
 - Expose via Prometheus-compatible metrics endpoint (future)
+
+---
+
+## 11. Requirements (ask-lifelens-v1)
+
+### Requirement: Providers support grounded follow-up answers
+
+The provider contract SHALL expose a follow-up interaction method that accepts the stored normalized image bytes and media type, the persisted analysis result, the authoritative risk/safety metadata, the relevant conversation history, and the user's question, and SHALL return a structured answer. The single-image `analyze` interaction remains unchanged and both interactions coexist on the same provider. Provider-specific errors SHALL be converted to the same internal error categories as the analysis flow.
+
+#### Scenario: Gemini composes a multi-part follow-up request
+
+- **WHEN** the Gemini provider serves a follow-up question
+- **THEN** it SHALL include the stored image as inline content in the request together with the analysis, safety metadata, and history, and SHALL return a validated structured answer
+
+#### Scenario: Provider timeout maps to retryable error
+
+- **WHEN** the provider exceeds the bounded timeout during a follow-up call
+- **THEN** the call fails with the retryable internal error category, consistent with the analysis flow
+
+### Requirement: Production uses the real provider; tests use deterministic stubs
+
+Production follow-up answers SHALL come from the real configured provider (Gemini in production). The deterministic stub SHALL, in automated tests only, produce contextual non-empty answers with content that references the supplied analysis, a plausible sentiment/intent structure, empty suggestion lists by default, and no sensitive echoes, passing the same server-side validation as Gemini output. Test code SHALL NOT appear behind production configuration.
+
+#### Scenario: Stub answers remain valid under production validation rules
+
+- **WHEN** an automated test exercises the stub follow-up method
+- **THEN** the returned answer passes the same validation the server applies to Gemini answers
+
+#### Scenario: Production configuration prefers the real provider
+
+- **WHEN** the production environment is configured for AI
+- **THEN** follow-up questions are served by the real provider, never by stubs

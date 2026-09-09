@@ -32,14 +32,16 @@ class Settings(BaseSettings):
     output_quality: int = 85
     guest_ttl_days: int = 7
     signed_url_ttl_seconds: int = 300
-    analysis_timeout_seconds: int = 45
+    analysis_timeout_seconds: int = 120
     ai_provider: str = "gemini"
     google_ai_api_key: str = ""
-    ai_model_gemini: str = "gemini-2.5-flash"
-    ai_timeout_seconds: float = 30.0
+    ai_model_gemini: str = "gemini-3.5-flash-lite"
+    ai_timeout_seconds: float = 90.0
     ai_temperature: float = 0.2
     ai_max_tokens: int = 2048
     ai_top_p: float = 0.95
+    conversational_cap: int = 8
+    conversation_context_messages: int = 20
 
 
 @lru_cache

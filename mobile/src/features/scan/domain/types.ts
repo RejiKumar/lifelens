@@ -21,6 +21,8 @@ export interface Moment {
 }
 
 export interface AnalysisResult {
+  id?: string | null;
+  scan_id?: string | null;
   title: string;
   category: string;
   summary: string;
@@ -35,8 +37,10 @@ export interface AnalysisResult {
 }
 
 export interface QuotaInfo {
-  remaining: number;
+  used: number;
   limit: number;
+  remaining: number;
+  is_pro: boolean;
   resets_at: string | null;
 }
 
@@ -47,6 +51,28 @@ export interface ScanResponse {
   analysis: AnalysisResult | null;
   safety: SafetyMetadata;
   quota: QuotaInfo | null;
+}
+
+export type ChatRole = 'user' | 'assistant';
+
+export interface ChatMessage {
+  id: string;
+  role: ChatRole;
+  content: string;
+  created_at: string;
+}
+
+export interface FollowUpResponse {
+  message: ChatMessage;
+  remaining_capacity: number;
+  quota: QuotaInfo;
+}
+
+export interface ChatHistoryResponse {
+  messages: ChatMessage[];
+  next_cursor: string | null;
+  remaining_capacity: number;
+  quota: QuotaInfo;
 }
 
 export interface SignedUrlResponse {

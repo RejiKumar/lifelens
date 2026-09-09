@@ -27,7 +27,7 @@ environments:
     firebase:
       project_id: "lifelens-qa"
     gemini:
-      model: "gemini-1.5-flash"
+      model: "gemini-3.6-flash"
     build_type: "preview"
   prod:
     branch: prod
@@ -40,7 +40,7 @@ environments:
     firebase:
       project_id: "lifelens-prod"
     gemini:
-      model: "gemini-1.5-flash"
+      model: "gemini-3.6-flash"
     build_type: "production"
 
 branches:

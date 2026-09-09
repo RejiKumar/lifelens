@@ -56,6 +56,13 @@ class QuotaExceededError(LifeLensError):
         self.quota = quota
 
 
+class LimitExceededError(LifeLensError):
+    """A per-conversation cap was reached (distinct from a daily quota)."""
+
+    code = "LIMIT_EXCEEDED"
+    status_code = 429
+
+
 class UnauthorizedError(LifeLensError):
     code = "UNAUTHORIZED"
     status_code = 401

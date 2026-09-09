@@ -163,6 +163,26 @@ class AnalysisRepository:
         result = await self._session.execute(select(Analysis).where(Analysis.scan_id == scan_id))
         return result.scalar_one_or_none()
 
+    async def get_with_scan(
+        self, analysis_id: UUID, *, owner: str | None, is_guest: bool
+    ) -> tuple[Analysis, Scan] | None:
+        """Fetch an analysis joined with its scan, scoped to owner and not expired."""
+        stmt = (
+            select(Analysis, Scan)
+            .join(Scan, Analysis.scan_id == Scan.id)
+            .where(Analysis.id == analysis_id)
+        )
+        if is_guest:
+            stmt = stmt.where(Scan.guest_session_id == owner)
+        else:
+            stmt = stmt.where(Scan.user_id == owner)
+        stmt = stmt.where((Scan.expires_at.is_(None)) | (Scan.expires_at >= utcnow()))
+        result = await self._session.execute(stmt)
+        row = result.one_or_none()
+        if row is None:
+            return None
+        return row[0], row[1]
+
     async def update_by_scan(self, scan_id: UUID, analysis: AnalysisRecord) -> None:
         """Overwrite the analysis row for a scan in place (legacy row refresh)."""
         row = await self.get_by_scan(scan_id)

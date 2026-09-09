@@ -1,17 +1,20 @@
-"""Deterministic stub AI provider for scan-v1.
+"""Deterministic stub AI provider for scan-v1 and ask-lifelens-v1.
 
 Lets the full pipeline run and be tested without any Gemini credentials or
 network access. Selected via ``AI_PROVIDER=stub``. Returns a plausible,
-schema-shaped analysis for whatever image is presented.
+schema-shaped analysis for whatever image is presented and contextual,
+non-empty follow-up answers that reference the stored analysis. The stub is
+only for local QA and automated tests — production always uses a real
+provider.
 """
 
 from __future__ import annotations
 
-from app.providers.base import RawAnalysis
+from app.providers.base import RawAnalysis, RawFollowUp
 
 
 class StubProvider:
-    """AIProvider implementation returning a fixed, valid analysis."""
+    """AIProvider implementation returning deterministic, valid responses."""
 
     async def analyze_image(
         self,
@@ -47,4 +50,28 @@ class StubProvider:
                 "What are common uses for this item?",
                 "How should I care for or maintain it?",
             ],
+        )
+
+    async def follow_up(
+        self,
+        *,
+        image_bytes: bytes,
+        mime: str,
+        analysis: dict[str, object],
+        safety: dict[str, object],
+        history: list[dict[str, str]],
+        question: str,
+    ) -> RawFollowUp:
+        title = str(analysis.get("title") or "").strip() or "the scanned item"
+        risk_level = str(safety.get("risk_level") or "LOW").upper()
+        answer = (
+            f"Your scan shows {title}. Based on what's visible and the "
+            f"analysis I recorded, the subject stays at {risk_level} risk. "
+            "I'm only able to comment on what is in this image — please "
+            "contact a professional for anything beyond that."
+        )
+        return RawFollowUp(
+            answer=answer,
+            risk_level=risk_level,
+            follow_up_suggestions=[],
         )

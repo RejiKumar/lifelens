@@ -19,9 +19,12 @@ from app.core.identity import AuthVerifier, GuestVerifier, Identity
 from app.providers.base import AIProvider
 from app.providers.gemini import GeminiProvider
 from app.providers.stub import StubProvider
+from app.repositories.conversation import MessageRepository, UsageRepository
 from app.repositories.scan import AnalysisRepository, ScanRepository
 from app.repositories.storage import StorageRepository, build_storage_repository
-from app.services.analysis import AnalysisService, NoopQuota, QuotaContext
+from app.services.analysis import AnalysisService
+from app.services.conversation import ConversationService
+from app.services.quota import QuotaService
 
 
 async def get_db_session() -> AsyncGenerator[AsyncSession]:
@@ -66,8 +69,8 @@ def get_provider(settings: Settings = Depends(get_settings)) -> AIProvider:
     raise RuntimeError(f"Unsupported AI provider: {settings.ai_provider!r}")
 
 
-def get_quota(settings: Settings = Depends(get_settings)) -> QuotaContext:
-    return NoopQuota()
+def get_quota(session: AsyncSession = Depends(get_db_session)) -> QuotaService:
+    return QuotaService(usage=UsageRepository(session))
 
 
 def get_storage(settings: Settings = Depends(get_settings)) -> StorageRepository:
@@ -81,7 +84,7 @@ def get_storage(settings: Settings = Depends(get_settings)) -> StorageRepository
 def get_analysis_service(
     session: AsyncSession = Depends(get_db_session),
     provider: AIProvider = Depends(get_provider),
-    quota: QuotaContext = Depends(get_quota),
+    quota: QuotaService = Depends(get_quota),
     storage: StorageRepository = Depends(get_storage),
     settings: Settings = Depends(get_settings),
 ) -> AnalysisService:
@@ -98,4 +101,23 @@ def get_analysis_service(
         output_quality=settings.output_quality,
         guest_ttl_days=settings.guest_ttl_days,
         analysis_timeout_seconds=settings.analysis_timeout_seconds,
+    )
+
+
+def get_conversation_service(
+    session: AsyncSession = Depends(get_db_session),
+    provider: AIProvider = Depends(get_provider),
+    quota: QuotaService = Depends(get_quota),
+    storage: StorageRepository = Depends(get_storage),
+    settings: Settings = Depends(get_settings),
+) -> ConversationService:
+    return ConversationService(
+        analyses=AnalysisRepository(session),
+        messages=MessageRepository(session),
+        storage=storage,
+        provider=provider,
+        quota=quota,
+        follow_up_timeout_seconds=settings.analysis_timeout_seconds,
+        conversational_cap=settings.conversational_cap,
+        context_window_messages=settings.conversation_context_messages,
     )
