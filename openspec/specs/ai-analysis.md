@@ -1,9 +1,9 @@
 # AI Analysis Specification
 
 **Module:** AI Analysis
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Active
-**Last Updated:** 2026-09-07
+**Last Updated:** 2026-09-08
 
 ---
 
@@ -77,6 +77,11 @@ class RiskLevel(str, Enum):
     CRITICAL = "CRITICAL"
 
 
+class Moment(BaseModel):
+    headline: str = Field(description="Why the identified item matters right now", max_length=140)
+    action: str = Field(description="One safe next step for the user", max_length=280)
+
+
 class AnalysisResult(BaseModel):
     id: str = Field(description="UUID of this analysis")
     scan_id: str = Field(description="Reference to the originating scan")
@@ -90,6 +95,7 @@ class AnalysisResult(BaseModel):
     warnings: list[str] = Field(description="Safety warnings if applicable", max_length=10)
     when_to_seek_help: Optional[str] = Field(description="When to consult a professional", default=None)
     follow_up_suggestions: list[str] = Field(description="Suggested follow-up questions", max_length=5)
+    moment: Moment = Field(description="Image-grounded headline and action")
     created_at: datetime = Field(description="Timestamp of analysis creation")
 ```
 
@@ -109,6 +115,7 @@ class AnalysisResult(BaseModel):
 | `warnings`            | array[string] | 0–10 items, each 1–500 chars                  |
 | `when_to_seek_help`   | string\|null  | 0–1000 chars or null                          |
 | `follow_up_suggestions`| array[string]| 0–5 items, each 1–200 chars                   |
+| `moment`              | object (Moment) | `headline` 1–140 chars, `action` 1–280 chars, both non-empty |
 | `created_at`          | datetime      | ISO 8601 UTC, server-generated                |
 
 ### 3.3 JSON Schema for AI Provider
@@ -145,12 +152,20 @@ The schema sent to the AI provider is derived from the Pydantic model and format
       "type": "array",
       "items": { "type": "string" },
       "maxItems": 5
+    },
+    "moment": {
+      "type": "object",
+      "properties": {
+        "headline": { "type": "string", "minLength": 1, "maxLength": 140 },
+        "action": { "type": "string", "minLength": 1, "maxLength": 280 }
+      },
+      "required": ["headline", "action"]
     }
   },
   "required": [
     "title", "category", "summary", "confidence",
     "risk_level", "observations", "actions", "warnings",
-    "when_to_seek_help", "follow_up_suggestions"
+    "when_to_seek_help", "follow_up_suggestions", "moment"
   ]
 }
 ```
@@ -178,6 +193,11 @@ Rules:
 - Never provide definitive medical, legal, or financial advice.
 - When professional consultation is appropriate, set when_to_seek_help with
   a clear recommendation.
+- Always include a moment with a headline (why it matters) and one safe,
+  image-grounded action (what to do).
+- Never invent causes, risks, or procedures the image does not support; when
+  no safe direct action can be verified, the moment's action must defer to
+  professional help.
 ```
 
 ### 4.2 User Prompt
@@ -231,7 +251,11 @@ Example output for an image of a banana:
     "How long will this banana stay fresh?",
     "What are the nutritional values?",
     "What recipes can I make with ripe bananas?"
-  ]
+  ],
+  "moment": {
+    "headline": "This ripe banana is ready to eat now",
+    "action": "Peel and enjoy, or store at room temperature for 1-2 days"
+  }
 }
 ```
 
@@ -269,6 +293,7 @@ Apply these transforms after successful validation:
 | `warnings`    | Trim each item, remove empty strings                          |
 | `when_to_seek_help`| Trim if not null                                        |
 | `follow_up_suggestions`| Trim each item, remove empty strings                  |
+| `moment`      | Trim `headline` and `action`; if either becomes empty, reject as `analysis_failed` |
 
 ### 5.4 Safety Policy
 
@@ -289,6 +314,7 @@ Apply safety rules after normalization:
 - Generate UUID for `id` (server-side)
 - Set `created_at` to current UTC timestamp
 - Write the full `AnalysisResult` to the database
+- Persist the validated `moment` with the analysis row; later fetches by id return the same persisted moment
 - Associate with the originating `scan_id`
 - Index on `scan_id`, `created_at`, and `category` for query performance
 
@@ -306,6 +332,7 @@ Apply safety rules after normalization:
 ### 6.2 Schema Validation Failure
 
 - If Pydantic validation fails, log the validation errors at ERROR level
+- If the provider response's `moment` violates schema or normalization bounds, reject the analysis as `analysis_failed` and do not persist or return it
 - Retry once: re-send the prompt with the validation error details appended:
   "Your response failed validation: {errors}. Correct these issues and respond with valid JSON."
 - If the retry also fails, return error to client
@@ -468,6 +495,10 @@ GET /analysis/{id}
     "warnings": [],
     "when_to_seek_help": null,
     "follow_up_suggestions": ["How long will it stay fresh?"],
+    "moment": {
+      "headline": "This ripe banana is ready to eat now",
+      "action": "Peel and enjoy, or store at room temperature for 1-2 days"
+    },
     "created_at": "2026-09-07T12:00:08Z"
   },
   "created_at": "2026-09-07T12:00:08Z"
