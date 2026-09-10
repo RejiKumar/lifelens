@@ -46,5 +46,5 @@
 
 - [x] 7.1 Restart backend; API smoke with stub: scan -> follow-up (grounded answer) -> chat-history restore -> quota reflected -> cap reached
 - [ ] 7.2 Device E2E on QA (stub provider): scan subject, ask follow-up inline, suggestions submit, reopen scan restores thread, single back control, no route text
-- [ ] 7.3 Commit the uncommitted moment-v1 spec sync/archive on qa first, then run OpenSpec spec-sync for ask-lifelens-v1 (reconcile ai-analysis.md old Follow-Up Chat prose against new requirements) and archive this change
+- [x] 7.3 Commit the uncommitted moment-v1 spec sync/archive on qa first, then run OpenSpec spec-sync for ask-lifelens-v1 (reconcile ai-analysis.md old Follow-Up Chat prose against new requirements) and archive this change
 - [ ] 7.4 PROD Gemini smoke: user supplies GOOGLE_AI_API_KEY + AI_PROVIDER=gemini; verify real grounded follow-up answers in PROD (blocked until key provided)

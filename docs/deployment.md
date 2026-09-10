@@ -33,7 +33,8 @@ Health check: `GET /healthz` → `{"status":"ok","environment":"<app_env>"}`.
 | `SUPABASE_ANON_KEY` | QA anon key | PROD anon key | Supabase project dashboard |
 | `SUPABASE_SERVICE_ROLE_KEY` | QA service role | PROD service role | Supabase project dashboard (server-side only) |
 | `CORS_ORIGINS` | `https://api-qa.lifelens.app` | `https://api.lifelens.app` | Config |
-| `GEMINI_API_KEY` | QA key | PROD key | Provider console (added in AI phase) |
+| `AI_PROVIDER` | `gemini` | `gemini` | Config |
+| `GOOGLE_AI_API_KEY` | QA key | PROD key | Provider console (server-side only) |
 
 Every value is injected as a Render secret/`env` value — never committed. Secrets must never be
 shared between the QA and PROD services.

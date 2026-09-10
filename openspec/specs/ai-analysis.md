@@ -1,9 +1,9 @@
 # AI Analysis Specification
 
 **Module:** AI Analysis
-**Version:** 1.2.0
+**Version:** 1.3.0
 **Status:** Active
-**Last Updated:** 2026-09-09
+**Last Updated:** 2026-09-10
 
 ---
 
@@ -649,3 +649,23 @@ Contrary to the historical design in the Follow-Up Chat section where follow-up 
 
 - **WHEN** the provider composes a follow-up request
 - **THEN** the stored normalized image is included as inline content alongside the analysis and safety context, complying with the `ai-conversation` grounding requirement
+
+---
+
+## 10. Requirements (scan-v1)
+
+Requirements added by the `scan-v1` change. These reconcile the synchronous MVP with the canonical specification and supersede any legacy async or split-upload prose above.
+
+### Requirement: Synchronous analysis result
+
+The analysis step shall execute inside the synchronous `POST /scan/analyze` request and shall return the fully validated `AnalysisResult` (including safety metadata) in the same HTTP response. The MVP shall not expose analysis through a separate 202 `processing` status and shall not require result polling; the result is returned before the response completes.
+
+#### Scenario: Result returned inline
+
+- **WHEN** analysis completes successfully within the scan request
+- **THEN** the response contains the validated analysis result, safety metadata, and server timestamps
+
+#### Scenario: Failed or invalid analysis
+
+- **WHEN** analysis cannot produce a valid result within the bounded timeouts and retries
+- **THEN** the server returns a structured `analysis_failed` error with a user-friendly message and the originating scan reference

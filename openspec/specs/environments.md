@@ -32,7 +32,7 @@ No QA build may reference production infrastructure, and no production build may
 
 Configuration is supplied exclusively through environment variables. There are three variable groups:
 
-1. **Backend environment variables** — read by the FastAPI backend at container startup (e.g., `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `GEMINI_API_KEY`, `GOOGLE_PROJECT_ID`).
+1. **Backend environment variables** — read by the FastAPI backend at container startup (e.g., `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `GOOGLE_AI_API_KEY`, `GOOGLE_PROJECT_ID`).
 2. **Mobile environment variables** — consumed at build time by Expo/EAS and at runtime via `process.env.EXPO_PUBLIC_*` (e.g., `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_ADMOB_APP_ID`).
 3. **Pipeline environment variables** — used only by CI/CD (GitHub Actions secrets) and never bundled into artifacts.
 
@@ -120,7 +120,7 @@ All secrets — API keys, service role keys, OAuth client secrets, AdMob credent
 All pipeline-injected secrets are stored in GitHub Actions secrets (organization or repository level, scoped per environment). Examples:
 
 - `QA_SUPABASE_SERVICE_ROLE_KEY`, `PROD_SUPABASE_SERVICE_ROLE_KEY`
-- `QA_GEMINI_API_KEY`, `PROD_GEMINI_API_KEY`
+- `QA_GOOGLE_AI_API_KEY`, `PROD_GOOGLE_AI_API_KEY`
 - `EAS_PROJECT_ID`, `EXPO_TOKEN`
 
 These secrets are referenced by name in workflow files and are never written into the workflow files themselves.

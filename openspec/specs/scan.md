@@ -1,9 +1,9 @@
 # Scan / Camera Specification
 
 **Module:** Scan
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Active
-**Last Updated:** 2026-09-07
+**Last Updated:** 2026-09-10
 
 ---
 
@@ -220,9 +220,11 @@ Capture/Select → Compress → Resize → Preview → Upload → Analyze
 
 ## 8. API Endpoints
 
-### 8.1 POST /scan/upload
+> **Note:** The legacy two-phase `POST /scan/upload` (returning `status: uploaded` with an `image_url`) and the async `POST /scan/analyze` (returning `status: processing` with polling) are superseded. The single synchronous `POST /scan/analyze` is the only scan-initiation endpoint. No `image_url` field appears in any scan response (see "No permanent public image URLs" requirement).
 
-Upload an image for scanning.
+### 8.1 POST /scan/analyze (Synchronous)
+
+Submit an image and receive the validated analysis result in a single synchronous request.
 
 **Request:**
 ```
@@ -231,71 +233,15 @@ Content-Type: multipart/form-data
 Fields:
   image: File (required) — the processed image (JPEG/WebP, max 10MB)
   idempotency_key: string (required) — UUID for duplicate prevention
-  source: enum (optional) — "camera" | "gallery" | "upload", default "camera"
-```
-
-**Response 201:**
-```json
-{
-  "id": "uuid",
-  "status": "uploaded",
-  "image_url": "https://...",
-  "created_at": "2026-09-07T12:00:00Z"
-}
-```
-
-**Errors:**
-- `400` — Invalid file type or size exceeded
-- `401` — Authentication required
-- `413` — File too large
-- `429` — Rate limit exceeded
-- `500` — Server error
-
-### 8.2 POST /scan/analyze
-
-Trigger AI analysis on a previously uploaded image.
-
-**Request:**
-```json
-{
-  "scan_id": "uuid",
-  "context": "optional user-provided context string",
-  "analysis_type": "general" | "food" | "product" | "document"
-}
-```
-
-**Response 202:**
-```json
-{
-  "scan_id": "uuid",
-  "analysis_id": "uuid",
-  "status": "processing",
-  "estimated_duration_ms": 8000
-}
-```
-
-**Errors:**
-- `400` — Invalid scan_id or missing required fields
-- `401` — Authentication required
-- `404` — Scan not found
-- `429` — Rate limit exceeded
-- `500` — Server error
-
-### 8.3 GET /scan/:id
-
-Retrieve a scan result by ID.
-
-**Request:**
-```
-GET /scan/{id}
+  source: enum (optional) — "camera" | "gallery" | "file", default "camera"
 ```
 
 **Response 200:**
 ```json
 {
   "id": "uuid",
-  "status": "completed" | "processing" | "failed",
-  "image_url": "https://...",
+  "status": "completed",
+  "created_at": "2026-09-07T12:00:00Z",
   "analysis": {
     "id": "uuid",
     "title": "Fresh Banana",
@@ -307,15 +253,97 @@ GET /scan/{id}
     "actions": ["Safe to eat", "Store at room temperature"],
     "warnings": [],
     "when_to_seek_help": null,
-    "follow_up_suggestions": ["How long will it stay fresh?", "Nutritional info?"]
+    "follow_up_suggestions": ["How long will it stay fresh?", "Nutritional info?"],
+    "moment": {
+      "headline": "This ripe banana is ready to eat now",
+      "action": "Peel and enjoy, or store at room temperature for 1-2 days"
+    },
+    "created_at": "2026-09-07T12:00:08Z"
   },
-  "created_at": "2026-09-07T12:00:00Z",
-  "completed_at": "2026-09-07T12:00:08Z"
+  "safety": {
+    "risk_level": "LOW",
+    "categories": [],
+    "warnings": []
+  },
+  "quota": {
+    "used": 1,
+    "limit": 5,
+    "is_pro": false
+  }
 }
 ```
 
 **Errors:**
-- `404` — Scan not found
+- `400` — Missing image, invalid format, or below minimum resolution (<200x200)
+- `401` — Authentication required
+- `413` — File exceeds 15 MB
+- `429` — Daily quota exhausted (`QUOTA_EXCEEDED`)
+- `500` — Analysis failed or server error
+
+### 8.2 GET /scan/{id}
+
+Retrieve a stored scan result by ID. Expired guest scans return 404.
+
+**Request:**
+```
+GET /scan/{id}
+```
+
+**Response 200:**
+```json
+{
+  "id": "uuid",
+  "status": "completed",
+  "created_at": "2026-09-07T12:00:00Z",
+  "analysis": {
+    "id": "uuid",
+    "title": "Fresh Banana",
+    "category": "food",
+    "summary": "A ripe banana, approximately 7 inches long.",
+    "confidence": 0.95,
+    "risk_level": "LOW",
+    "observations": ["Yellow peel with slight brown spotting", "No visible damage"],
+    "actions": ["Safe to eat", "Store at room temperature"],
+    "warnings": [],
+    "when_to_seek_help": null,
+    "follow_up_suggestions": ["How long will it stay fresh?", "Nutritional info?"],
+    "moment": {
+      "headline": "This ripe banana is ready to eat now",
+      "action": "Peel and enjoy, or store at room temperature for 1-2 days"
+    },
+    "created_at": "2026-09-07T12:00:08Z"
+  },
+  "safety": {
+    "risk_level": "LOW",
+    "categories": [],
+    "warnings": []
+  }
+}
+```
+
+**Errors:**
+- `404` — Scan not found or expired
+- `401` — Authentication required
+
+### 8.3 GET /scan/{id}/signed-url
+
+Issue a short-lived signed URL for the stored scan image. Ownership is verified via session identity.
+
+**Request:**
+```
+GET /scan/{id}/signed-url
+```
+
+**Response 200:**
+```json
+{
+  "signed_url": "https://...",
+  "expires_at": "2026-09-07T12:05:00Z"
+}
+```
+
+**Errors:**
+- `404` — Scan not found, expired, or not owned by the requester
 - `401` — Authentication required
 
 ### 8.4 GET /scan/history
@@ -352,3 +380,103 @@ GET /scan/history?page=1&limit=20&sort=desc
 **Errors:**
 - `401` — Authentication required
 - `429` — Rate limit exceeded
+
+---
+
+## 9. Requirements (scan-v1)
+
+Requirements added by the `scan-v1` change. These reconcile the locked synchronous MVP with the canonical spec and supersede any legacy async or split-upload prose above.
+
+### Requirement: Supersede legacy split-upload endpoints
+
+The legacy two-phase scan endpoints in this specification are superseded: `POST /scan/upload` (returning `status: uploaded` and an `image_url`) and the async `POST /scan/analyze` (returning `status: processing` with polling) shall not be implemented. The single synchronous `POST /scan/analyze` is the only scan-initiation endpoint. Any `image_url` field shall not appear in scan upload, analysis, or result responses.
+
+#### Scenario: Only the synchronous endpoint is implemented
+
+- **WHEN** a client inspects the exposed scan API surface
+- **THEN** only the synchronous `POST /scan/analyze` and the read endpoints (`GET /scan/{scan_id}`, `GET /scan/{scan_id}/signed-url`) exist; neither the split upload endpoints nor polling behavior are present
+
+#### Scenario: Result shape carries no image_url
+
+- **WHEN** the server returns a scan upload, analysis, or result response
+- **THEN** the payload contains no `image_url` field and no publicly addressable object path
+
+### Requirement: Synchronous analysis request
+
+The scan flow shall submit an image and receive the validated analysis result in a single synchronous `POST /scan/analyze` request. The response shall include the full analysis, the safety metadata, and (where available) the quota state. The two-phase flow (separate upload returning `status: uploaded`, then analysis returning `status: processing`, then polling for a result) shall not be used in the MVP.
+
+#### Scenario: Full scan completes in one request
+
+- **WHEN** a client sends `POST /scan/analyze` with a valid processed image and idempotency key
+- **THEN** the server returns HTTP 200 with the validated analysis result and safety metadata in the same response body
+
+#### Scenario: Quota exhaustion blocks analysis
+
+- **WHEN** the daily scan quota is exhausted at the time of the request
+- **THEN** the server returns HTTP 429 with the `QUOTA_EXCEEDED` error envelope and performs no analysis
+
+#### Scenario: Invalid or oversized image rejected
+
+- **WHEN** the request is missing an image, the image fails format validation, or the file exceeds the size limit
+- **THEN** the server returns HTTP 400 (or 413 for file-size violations) and persists nothing
+
+### Requirement: Image upload and normalization bounds
+
+The client shall deliver a normalized image: JPEG or WebP, longest edge at most 2048 pixels, encoded at quality 85 or lower, file size at most 10 MB. The server shall accept jpg/jpeg/png/webp inputs up to 15 MB and up to 8192 pixels on the longest edge, and shall re-encode inputs to JPEG or WebP at most 2048 pixels before analysis or storage. HEIC/HEIF inputs shall be converted to JPEG by the client before upload.
+
+#### Scenario: Client normalizes before upload
+
+- **WHEN** a captured or selected image exceeds 2048 pixels or 10 MB
+- **THEN** the client resizes, compresses, and re-encodes it to JPEG/WebP at most 2048 px and 10 MB before calling the API
+
+#### Scenario: Oversized upload rejected
+
+- **WHEN** an uploaded file exceeds 15 MB
+- **THEN** the server returns HTTP 413 and rejects the request
+
+#### Scenario: HEIC converted client-side
+
+- **WHEN** the user selects a HEIC/HEIF image
+- **THEN** the client converts it to JPEG before upload
+
+### Requirement: No permanent public image URLs
+
+The scan endpoints shall never return permanent public image URLs. Any image reference returned to the client shall be a short-lived signed URL (TTL 5 minutes) issued through a server-side storage endpoint.
+
+#### Scenario: Result response contains no public URL
+
+- **WHEN** the server returns a successful scan or analysis response
+- **THEN** the response contains no permanent `image_url` and no publicly addressable object path
+
+#### Scenario: Display URL issued via signed-url endpoint
+
+- **WHEN** the client requests the image for a scan via the signed-url endpoint
+- **THEN** the server returns a signed URL valid for 5 minutes scoped to that single object
+
+### Requirement: Idempotent scan submission
+
+The client shall generate an idempotency key for each upload attempt and send it with the request. The server shall treat duplicate submissions (same content hash or a replayed idempotency key) as idempotent and shall return the existing scan result instead of re-analyzing.
+
+#### Scenario: Duplicate image returns existing result
+
+- **WHEN** a client submits an image whose content hash matches an existing scan
+- **THEN** the server blocks the duplicate and returns the existing scan and analysis result
+
+### Requirement: Server-side image normalization
+
+The server shall validate every uploaded image and re-encode it into a canonical form before analysis or persistence: enforce the accepted formats and size/dimension bounds, reject images below the minimum resolution (200x200 px) with a 400 error as they cannot be analyzed meaningfully, strip all EXIF metadata, and output a normalized JPEG or WebP image with a longest edge of at most 2048 pixels.
+
+#### Scenario: EXIF stripped server-side
+
+- **WHEN** an image containing EXIF metadata reaches the server
+- **THEN** the stored image has all EXIF (GPS, device, timestamp) removed before persistence
+
+#### Scenario: Oversized input normalized server-side
+
+- **WHEN** an uploaded image is larger than 2048 pixels on its longest edge
+- **THEN** the server downscales it to at most 2048 pixels before analysis and storage
+
+#### Scenario: Below-minimum image rejected
+
+- **WHEN** an uploaded image is smaller than 200x200 pixels
+- **THEN** the server returns HTTP 400 and performs no analysis or persistence

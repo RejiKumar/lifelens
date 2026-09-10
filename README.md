@@ -62,7 +62,7 @@ Performed when the repository is created on GitHub (requires owner access):
 2. Branch protection on `prod`: require PR, require status checks to pass, no force-push, no direct pushes.
 3. Branch protection on `qa`: prevent force-push to shared history.
 4. Create GitHub **Environments** `qa` and `prod`; scope secrets per environment (never repo-level where avoidable):
-   - `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `GEMINI_API_KEY`
+   - `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `GOOGLE_AI_API_KEY`
 5. Add `EXPO_TOKEN` (EAS) and any EAS owner/account secrets used by `build-mobile.yml`.
 6. Enable the `ci.yml` status check as required on PRs.
 

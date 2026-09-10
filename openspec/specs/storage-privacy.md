@@ -31,23 +31,37 @@ Filename sanitization rules:
 - Path traversal sequences (`..`, `/`, `\`) are stripped or rejected.
 - The final filename matches the regex `^[a-z0-9_]+\.(jpg|jpeg|png|webp)$`.
 
-### 1.3 Guest Image Storage (Temporary)
+### 1.3 Guest Image Storage (Temporary, Server-Side)
 
-Images captured by unauthenticated (guest) users are considered **temporary**:
+Guest scans are persisted server-side on a temporary basis; the authoritative scan store is not device-local. A guest scan stores its image in the private bucket under a guest-scoped path (`{guest_session_id}/{scan_id}/{filename}`) and records a scan row with `user_id` NULL. Guest data is retained for at most 7 days from creation. The 7-day limit is recorded as TTL metadata on the scan row; the recurring purge/scheduled-cleanup job is implemented in a later change, not in the MVP. "Device-local only" applies to guest history and export features, not to analysis storage.
 
 | Property             | Value                                    |
 |----------------------|------------------------------------------|
-| Retention            | 7 days from the upload timestamp         |
-| Purge mechanism      | Scheduled job, runs automatically        |
+| Retention            | 7 days from the creation timestamp       |
+| Purge mechanism      | Deferred to a scheduled-cleanup change   |
 | Purge target         | All guest images older than the TTL      |
 | Access               | Same signed URL access as authenticated  |
 | Upgrade               | Guest scans may be migrated on sign-up    |
 
-Guest images expire exactly **7 days** after creation. A recurring scheduled task (invoked at minimum once per day) scans for guest images and guest-owned scan records whose `created_at` exceeds the TTL, then issues a hard delete of both the storage objects and the associated database rows.
+Guest images expire exactly **7 days** after creation. During the MVP, no background purge job removes expired guest data; enforcement is deferred to a scheduled-cleanup change that consumes the TTL metadata. Read-side expiry ensures expired scans return 404 from all endpoints.
 
 The TTL of **7 days** is fixed and is not configurable per-user. Guest data is ephemeral by design; users are encouraged to create an account to persist their scans.
 
-### 1.4 Authenticated Image Storage (Persistent)
+### 1.4 TTL Metadata on Scans
+
+The `scans` table shall include an `expires_at` column (`timestamptz`, nullable). Authenticated scans shall have `expires_at` NULL, meaning persistent storage subject only to the account-deletion flow. Guest scans shall have `expires_at` set to `created_at + 7 days`.
+
+#### Scenario: Authenticated scan persists
+
+- **WHEN** an authenticated user's scan is created
+- **THEN** `expires_at` is NULL and the scan is retained indefinitely subject to account deletion
+
+#### Scenario: Guest scan expiry recorded
+
+- **WHEN** a guest scan is created
+- **THEN** `expires_at` is exactly `created_at + 7 days`
+
+### 1.5 Authenticated Image Storage (Persistent)
 
 Images belonging to authenticated users are **persistent**. They are never deleted automatically and remain available indefinitely, subject to the account deletion flow described in Section 4.
 
@@ -57,7 +71,7 @@ Authenticated images are only removed in these circumstances:
 - The user requests account deletion (Section 4).
 - Manual administrative action required by legal or moderation policy.
 
-### 1.5 Image Variants
+### 1.6 Image Variants
 
 Each uploaded image produces up to two storage variants:
 
@@ -77,7 +91,7 @@ Generation rules:
 - Thumbnail is stored at `{user_id}/{scan_id}/thumb.webp`.
 - Thumbnails may be cached on the client after first fetch.
 
-### 1.6 No Public URLs
+### 1.7 No Public URLs
 
 **No image in the system is ever exposed through a permanent public URL.** This is a hard, non-negotiable invariant.
 
@@ -86,7 +100,7 @@ Generation rules:
 - Client code never constructs or relies on permanent URLs pointing at an image.
 - Image URLs are never embedded in shared content, notifications, or emails (existing images referenced in emails must use short-TTL signed URLs).
 
-### 1.7 Signed URLs
+### 1.8 Signed URLs
 
 Client access to any image is always mediated through **short-lived signed URLs**:
 
@@ -126,28 +140,50 @@ All relational data lives in Supabase Postgres. The following tables are the can
 
 ### 2.2 `scans`
 
-| Column      | Type          | Constraints      | Notes                                   |
-|-------------|---------------|------------------|-----------------------------------------|
-| `id`        | `uuid`        | PK               |                                         |
-| `user_id`   | `uuid`        | **nullable**, FK → `users.id` | Null for guest scans      |
-| `image_path`| `text`        | not null         | Storage path: `{user_id}/{scan_id}/{filename}` |
-| `created_at`| `timestamptz` | not null, default `now()` |               |
+| Column           | Type          | Constraints      | Notes                                   |
+|------------------|---------------|------------------|-----------------------------------------|
+| `id`             | `uuid`        | PK               |                                         |
+| `user_id`        | `uuid`        | **nullable**, FK → `users.id` | Null for guest scans      |
+| `guest_session_id`| `text`       | **nullable**     | Guest session identifier                |
+| `status`         | `text`        | not null         | `completed` or `failed`                 |
+| `idempotency_key`| `text`        | not null         | Per-submission idempotency key          |
+| `content_hash`   | `text`        | not null         | SHA-256 of normalized image bytes       |
+| `storage_path`   | `text`        | not null         | Storage path: `{user_id|guest_session_id}/{scan_id}/{filename}` |
+| `source`         | `text`        | **nullable**     | `camera`, `gallery`, or `file`          |
+| `created_at`     | `timestamptz` | not null, default `now()` |               |
+| `completed_at`   | `timestamptz` | **nullable**     | Set when the scan analysis completes    |
+| `expires_at`     | `timestamptz` | **nullable**     | NULL for authenticated; `created_at + 7 days` for guests |
 
-`user_id` is nullable to support guest scans. Guest scans have `user_id = NULL` and are identified by their matching (non-user-scoped) storage path. Guest rows are purged by the 7-day TTL job.
+`user_id` is nullable to support guest scans. Guest scans have `user_id = NULL` and are identified by their matching `guest_session_id`. Guest rows carry `expires_at = created_at + 7 days`; authenticated rows have `expires_at` NULL. Guest rows are read-side expired (404 on access after TTL); physical purge is deferred to a scheduled-cleanup change.
 
-Index: `scans(user_id)` for history queries.
+Indexes: `scans(user_id)` for history queries; unique per-owner constraints on `(guest_session_id, idempotency_key)` and `(guest_session_id, content_hash)` for deduplication.
 
 ### 2.3 `analyses`
 
-| Column        | Type          | Constraints          | Notes                              |
-|---------------|---------------|----------------------|------------------------------------|
-| `id`          | `uuid`        | PK                   |                                    |
-| `scan_id`     | `uuid`        | FK → `scans.id`, not null | One analysis per scan          |
-| `result_json` | `jsonb`       | not null             | Structured analysis result         |
-| `risk_level`  | `text`        | not null             | See risk levels below              |
-| `created_at`  | `timestamptz` | not null, default `now()` |                            |
-
-`risk_level` is one of: `low`, `moderate`, `high`, `critical`.
+| Column                  | Type          | Constraints          | Notes                              |
+|-------------------------|---------------|----------------------|------------------------------------|
+| `id`                    | `uuid`        | PK                   |                                    |
+| `scan_id`               | `uuid`        | FK → `scans.id`, not null, unique | One analysis per scan      |
+| `title`                 | `text`        | not null             | Identified subject                 |
+| `category`              | `text`        | not null             | Classification                     |
+| `summary`               | `text`        | not null             | Plain language explanation         |
+| `confidence`            | `double precision` | not null         | 0.0–1.0                            |
+| `risk_level`            | `text`        | not null             | `low`, `medium`, `high`, `critical`|
+| `observations`          | `text[]`      | not null             | Array of observation strings       |
+| `actions`               | `text[]`      | not null             | Array of suggested actions         |
+| `warnings`              | `text[]`      | not null             | Array of safety warnings           |
+| `when_to_seek_help`     | `text`        | **nullable**         | Professional consultation advice   |
+| `follow_up_suggestions` | `text[]`      | not null             | Array of contextual questions      |
+| `moment_headline`       | `text`        | not null             | Moment headline (why it matters)   |
+| `moment_action`         | `text`        | not null             | Moment action (what to do)         |
+| `is_medical`            | `boolean`     | not null, default false | Medical category flag           |
+| `is_hazardous`          | `boolean`     | not null, default false | Hazardous substance flag         |
+| `is_electrical`         | `boolean`     | not null, default false | Electrical category flag         |
+| `is_structural`         | `boolean`     | not null, default false | Structural category flag         |
+| `is_vehicle`            | `boolean`     | not null, default false | Vehicle category flag            |
+| `is_chemical`           | `boolean`     | not null, default false | Chemical category flag           |
+| `is_gas`                | `boolean`     | not null, default false | Gas category flag                |
+| `created_at`            | `timestamptz` | not null, default `now()` |                            |
 
 Index: `analyses(scan_id)`.
 
@@ -159,9 +195,10 @@ Index: `analyses(scan_id)`.
 | `analysis_id` | `uuid`        | FK → `analyses.id`, not null | Parent analysis              |
 | `role`        | `text`        | not null               | `user` or `assistant`             |
 | `content`     | `text`        | not null               | Message text                       |
+| `seq`         | `integer`     | not null               | Sequence number within analysis    |
 | `created_at`  | `timestamptz` | not null, default `now()` |                            |
 
-Index: `chat_messages(analysis_id, created_at)` for chat retrieval.
+Unique constraint: `(analysis_id, seq)`. Index: `chat_messages(analysis_id, seq)` for ordered chat retrieval.
 
 ### 2.5 `entitlements`
 
@@ -176,17 +213,16 @@ Index: `chat_messages(analysis_id, created_at)` for chat retrieval.
 
 Index: `entitlements(user_id)`.
 
-### 2.6 `quota_usage`
+### 2.6 `usage`
 
 | Column        | Type          | Constraints | Notes                                    |
 |---------------|---------------|-------------|------------------------------------------|
 | `id`          | `uuid`        | PK          |                                          |
-| `user_id`     | `uuid`        | FK → `users.id`, not null |                        |
-| `date`        | `date`        | not null    | The UTC calendar day of usage            |
-| `scan_count`  | `integer`     | not null, default 0 | Number of scans used by the quota |
-| `bonus_count` | `integer`     | not null, default 0 | Scans granted via rewarded ads or other bonuses |
+| `subject`     | `text`        | not null    | Identity key (guest session or user id)  |
+| `usage_date`  | `date`        | not null    | The UTC calendar day of usage            |
+| `used`        | `integer`     | not null, default 0 | Units consumed today              |
 
-Unique constraint: `(user_id, date)`. Each (user, day) pair has exactly one row; counts are incremented as usage occurs.
+Unique constraint: `(subject, usage_date)`. Each (subject, day) pair has exactly one row; counts are incremented atomically via `INSERT ... ON CONFLICT DO UPDATE ... WHERE used < limit`.
 
 ## 3. Privacy Rules
 
@@ -196,7 +232,7 @@ The following rules are **non-negotiable invariants** and apply globally, regard
 
 1. **Images are private by default, always.** There is no opt-in that makes an image public, and no feature that publishes images. Privacy is the default and only state.
 
-2. **Never expose permanent public image URLs.** All image access is via private storage and short-TTL signed URLs (Section 1.7). Permanent public URLs are prohibited.
+2. **Never expose permanent public image URLs.** All image access is via private storage and short-TTL signed URLs (Section 1.8). Permanent public URLs are prohibited.
 
 3. **Never log raw image data.** Application logs, crash reports, and analytics must never include image binaries, base64 payloads, or image file content. Logs may reference object paths and IDs only.
 
@@ -206,7 +242,7 @@ The following rules are **non-negotiable invariants** and apply globally, regard
 
 6. **EXIF data is stripped on upload.** Before any image is stored or transmitted to the AI provider, EXIF metadata (GPS location, device, timestamp, author) is removed server-side. Storage is performed on the sanitized image.
 
-7. **Image metadata is not stored beyond path and size.** The database does not retain EXIF-derived fields. The only stored image metadata are the storage `image_path` and, where relevant, file size. No location, device, or camera metadata is persisted.
+7. **Image metadata is not stored beyond path and size.** The database does not retain EXIF-derived fields. The only stored image metadata are the storage `storage_path` and, where relevant, file size. No location, device, or camera metadata is persisted.
 
 ### 3.2 Enforcement
 
@@ -241,7 +277,7 @@ The purge removes, for the requesting user:
 - All associated storage images (originals and thumbnails) under `{user_id}/`.
 - All associated `analyses` rows.
 - All associated `chat_messages` rows.
-- Associated `entitlements` and `quota_usage` rows.
+- Associated `entitlements` and `usage` rows.
 
 Non-image data (subscription entitlement state) is handled through Google Play synchronization (Section 4.3).
 
@@ -286,7 +322,7 @@ Users can request an export of all their personal data. The export includes all 
 
 ### 5.2 Format
 
-- All relational data delivered as **JSON** files, one per entity type (`users.json`, `scans.json`, `analyses.json`, `chat_messages.json`, `entitlements.json`, `quota_usage.json`).
+- All relational data delivered as **JSON** files, one per entity type (`users.json`, `scans.json`, `analyses.json`, `chat_messages.json`, `entitlements.json`, `usage.json`).
 - A top-level `manifest.json` describes the dataset, export timestamp, and schema version.
 
 ### 5.3 Images
@@ -342,7 +378,7 @@ Users can request an export of all their personal data. The export includes all 
 | `analyses`        | Yes         |
 | `chat_messages`   | Yes         |
 | `entitlements`    | Yes         |
-| `quota_usage`     | Yes         |
+| `usage`          | Yes         |
 
 ### 7.2 Policies Enforce User-Scoped Access
 
@@ -352,7 +388,7 @@ Policies restrict access to rows owned by the requesting user:
 - `analyses`: joined through `scans` — a user can only see analyses belonging to their own scans.
 - `chat_messages`: joined through `analyses` → `scans` — user-scoped.
 - `entitlements`: `USING (user_id = auth.uid())`. Users can read only their own entitlement state.
-- `quota_usage`: `USING (user_id = auth.uid())`. Users can read/count only their own usage.
+- `usage`: `USING (subject = auth.uid())`. Users can read/count only their own usage.
 - `users`: a user may read/update only their own row (`USING (id = auth.uid())`).
 
 ### 7.3 Storage Policies Prevent Cross-User Access
