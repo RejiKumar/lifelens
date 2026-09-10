@@ -1,4 +1,5 @@
-# Local QA backend stack.
+# Local development stack — APP_ENV=qa (config-level QA over the shared single project).
+# QA and PROD share the SAME single Supabase project and SAME single Gemini key.
 # Real Supabase/Gemini values are injected via environment (never committed).
 services:
   backend:

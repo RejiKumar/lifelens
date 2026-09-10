@@ -16,31 +16,35 @@ workflow:
   allow_skip: false
 
 environments:
+  # qa and prod are application/deployment environments that SHARE the same
+  # single Supabase project, single Gemini project, and single GOOGLE_AI_API_KEY.
+  # They differ only in configuration (APP_ENV, CORS, API URL, logging, build profile).
+  # Do NOT create or require separate QA Supabase/Gemini projects or credentials.
   qa:
     branch: qa
     api_url: "https://api-qa.lifelens.app"
-    supabase_project: "lifelens-qa"
+    supabase_project: "lifelens"  # shared single project
     ad_mob_unit_ids:
       banner: "ca-app-pub-3940256099942544/6300978111"
       interstitial: "ca-app-pub-3940256099942544/1033173712"
       rewarded: "ca-app-pub-3940256099942544/5224354917"
     firebase:
-      project_id: "lifelens-qa"
+      project_id: "lifelens"  # shared single project
     gemini:
-      model: "gemini-3.6-flash"
+      model: "gemini-3.5-flash-lite"  # shared single model
     build_type: "preview"
   prod:
     branch: prod
     api_url: "https://api.lifelens.app"
-    supabase_project: "lifelens-prod"
+    supabase_project: "lifelens"  # shared single project
     ad_mob_unit_ids:
       banner: ""
       interstitial: ""
       rewarded: ""
     firebase:
-      project_id: "lifelens-prod"
+      project_id: "lifelens"  # shared single project
     gemini:
-      model: "gemini-3.6-flash"
+      model: "gemini-3.5-flash-lite"  # shared single model
     build_type: "production"
 
 branches:

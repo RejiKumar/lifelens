@@ -107,15 +107,16 @@ LifeLens follows the OpenSpec workflow for all development. This document explai
 ## Branch Strategy
 
 ```
-main (production-ready)
-  └── qa (integration branch)
+prod (production-ready, protected)
+  └── qa (development/integration branch)
        └── feat/feature-name (feature branches)
 ```
 
 - Feature branches are created from `qa`
 - Changes are merged into `qa` after verification
-- `qa` is promoted to `prod` after full QA cycle
+- `qa` is promoted to `prod` after validation
 - No direct commits to `prod`
+- Development, integration, and production all use the same production infrastructure
 
 ---
 

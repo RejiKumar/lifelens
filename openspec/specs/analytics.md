@@ -279,17 +279,22 @@ A toggle in the Settings screen allows the user to enable or disable analytics a
 
 ## 5. Analytics Configuration
 
-### 5.1 QA Environment
+### 5.1 Single Shared Project
 
-QA builds use a separate Firebase project (`lifelens-qa`) dedicated to testing. Events and crash reports from QA builds never mix with production data.
+There is exactly **one** Firebase project (`lifelens`), shared by QA and PROD — the same
+single-project model as Supabase and Gemini. No separate `lifelens-qa` project exists. QA and
+PROD builds report to the same project; they are distinguished by app version/build and device
+metadata, not by a different Firebase project.
 
-- GoogleService-Info.plist / google-services.json for QA
-- Separate Crashlytics project
-- Test campaign data isolated
+- GoogleService-Info.plist / google-services.json (single production config)
+- Single Crashlytics project
+- Campaign data isolated per environment via event/campaign metadata, not separate projects
 
 ### 5.2 Production Environment
 
-Production builds use the production Firebase project (`lifelens-prod`). Only approved production build artifacts may use this configuration, to keep telemetry clean.
+Production builds use the single shared Firebase project (`lifelens`). Only approved
+production build artifacts may use this configuration, to keep telemetry clean. (Same project
+as QA — QA is distinguished by verbose logging and build metadata.)
 
 ### 5.3 Debug Mode Logging
 

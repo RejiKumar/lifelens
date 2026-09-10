@@ -37,17 +37,19 @@ Every build is assigned a unique, monotonically increasing integer build number 
 
 `eas.json` defines separate build profiles that map to environments and artifact types. Each profile configures its own environment variables, credentials, and settings.
 
-### 2.2 Preview Profile: QA Builds (APK for Testing)
+### 2.2 Preview Profile: QA Builds (APK for Internal Testing)
 
 The `preview` profile produces an **APK** suitable for direct sideloading/internal QA:
 
 - Build target: `apk` (installable, not store-bound).
-- Environment variables: QA set (QA API URL, QA AdMob IDs, QA Firebase config, test billing products).
+- Environment variables: QA set (QA API URL, test AdMob IDs, QA Firebase config, test billing products).
 - `channel: preview` for runtime updates.
 - Credentials: EAS-managed QA/development keystore.
 - Distribution: internal testers via URL or artifact, not the Play Store.
 
-QA builds from the `preview` profile are triggered on pushes to the `qa` branch and for manual QA builds.
+QA builds from the `preview` profile are triggered on pushes to the `qa` branch and for manual
+QA builds. **QA and PROD share the same single Supabase/Firebase/Gemini project** — they differ
+only in configuration values (API URL, AdMob IDs, billing products, logging), never in projects.
 
 ### 2.3 Production Profile: AAB for Play Store
 
@@ -74,10 +76,12 @@ EAS Build manages the Android keystore for both profiles:
 
 Each profile injects its own complete set of environment variables (see the Environments Specification):
 
-- `qa` profile → QA variables.
-- `production` profile → PROD variables.
+- `qa` profile → QA variables (same shared single project).
+- `production` profile → PROD variables (same shared single project).
 
-Variables are defined in `eas.json` (referencing CI secrets, not committed values) and/or injected by the CI step. Cross-environment leakage is prevented by keeping QA and PROD variable sets distinct.
+Variables are defined in `eas.json` (referencing CI secrets, not committed values) and/or
+injected by the CI step. QA and PROD variable sets differ only in configuration values; no
+separate Supabase/Gemini/Firebase project exists for QA.
 
 ## 3. Build Types
 
@@ -197,7 +201,7 @@ Every production build must pass the full checklist before submission. The check
 - [ ] No debug flags enabled (dev-mode toggles, fake data, mock provider)
 - [ ] Environment configuration correct for PROD
 - [ ] AdMob IDs are production IDs (not test IDs)
-- [ ] Firebase config is production (`lifelens-prod`)
+- [ ] Firebase config is the single shared project (`lifelens`)
 - [ ] API URL is production (`api.lifelens.app`)
 - [ ] Billing products are live (not test products)
 - [ ] Signing key correct (production keystore)

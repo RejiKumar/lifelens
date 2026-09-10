@@ -13,7 +13,7 @@ jobs:
   eas-build:
     runs-on: ubuntu-latest
     name: EAS build (${{ github.ref_name }})
-    environment: ${{ github.ref_name }}
+    environment: prod
     steps:
       - uses: actions/checkout@v4
 

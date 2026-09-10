@@ -1,62 +1,69 @@
-# Backend Deployment — Render (MVP)
+# Backend Deployment — Railway
 
-Render is the MVP hosting target for the LifeLens FastAPI backend.
+Railway hosts the LifeLens FastAPI backend. There are two application/deployment environments
+(QA and PROD) that SHARE a single Supabase project and a single Gemini key/project; they differ
+only in configuration values.
 
 > **Status: planned, not live.** Phase 2 sets up the Docker image `ghcr.io/lifelens/backend`
-> via `build-backend.yml`. Creating the Render service, wiring secrets, and the first real
+> via `build-backend.yml`. Creating the Railway service, wiring secrets, and the first real
 > deployment are tracked in the future `deploy-v1` change. No production backend is deployed yet.
 
 ## Model
 
-- One Render **Web Service (Docker)** per environment: `lifelens-backend-qa` and `lifelens-backend-prod`.
-- Both environments are fully isolated: separate services, separate secret sets, separate Supabase projects.
-- Image: `ghcr.io/lifelens/backend:<sha>` (pushed by the `Build Backend Image` workflow).
-- Render redeploys on push-triggered webhook from the GitHub container registry.
+- One Railway service per environment: `lifelens-backend-qa` and `lifelens-backend-prod`.
+- Both environments share the SAME single Supabase project, the SAME single Gemini project, and
+  the SAME `GOOGLE_AI_API_KEY`. No separate QA Supabase/Gemini credentials are created or required.
+- The environments differ only in configuration (`APP_ENV`, CORS, API URL, logging).
+- Deployment uses the Dockerfile build path (`README`/`railway.toml`), which already honors the
+  Railway-injected `$PORT` and exposes the `/healthz` health check.
+- Railway redeploys on push to the tracked branch.
 
 ## Start command
 
-The Dockerfile default command honors Render's injected `$PORT`:
+The Dockerfile default command honors Railway's injected `$PORT`:
 
 ```sh
 uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
 ```
 
-Health check: `GET /healthz` → `{"status":"ok","environment":"<app_env>"}`.
+Health check: `GET /healthz` → `{"status":"ok","environment":"<app_env>"}` (already configured
+in `railway.toml`).
 
 ## Environment variables
 
 | Variable | QA | PROD | Source |
 |---|---|---|---|
-| `APP_ENV` | `qa` | `prod` | Config | 
-| `DATABASE_URL` | QA Supabase pooler URL | PROD Supabase pooler URL | Supabase project dashboard |
-| `SUPABASE_URL` | QA project URL | PROD project URL | Supabase project dashboard |
-| `SUPABASE_ANON_KEY` | QA anon key | PROD anon key | Supabase project dashboard |
-| `SUPABASE_SERVICE_ROLE_KEY` | QA service role | PROD service role | Supabase project dashboard (server-side only) |
-| `CORS_ORIGINS` | `https://api-qa.lifelens.app` | `https://api.lifelens.app` | Config |
+| `APP_ENV` | `qa` | `prod` | Config |
+| `DATABASE_URL` | shared project pooler URL | shared project pooler URL | Supabase project dashboard |
+| `SUPABASE_URL` | shared project URL | shared project URL | Supabase project dashboard |
+| `SUPABASE_ANON_KEY` | shared anon key | shared anon key | Supabase project dashboard |
+| `SUPABASE_SERVICE_ROLE_KEY` | shared service role | shared service role | Supabase project dashboard (server-side only) |
+| `STORAGE_BUCKET` | shared bucket | shared bucket | Supabase project dashboard |
+| `CORS_ORIGINS` | `["https://api-qa.lifelens.app"]` | `["https://api.lifelens.app"]` | Config (JSON array — the setting is `list[str]`) |
 | `AI_PROVIDER` | `gemini` | `gemini` | Config |
-| `GOOGLE_AI_API_KEY` | QA key | PROD key | Provider console (server-side only) |
+| `AI_MODEL_GEMINI` | `gemini-3.5-flash-lite` | `gemini-3.5-flash-lite` | Config |
+| `GOOGLE_AI_API_KEY` | shared prod key | shared prod key | Provider console (server-side only) |
 
-Every value is injected as a Render secret/`env` value — never committed. Secrets must never be
-shared between the QA and PROD services.
+Every value is injected as a Railway variable — never committed. The single `GOOGLE_AI_API_KEY`
+is backend-only: never expose it to the mobile client, log it, print it, or commit it.
 
 > Connect to Supabase via **transaction/pooler mode** (port `5432`) for the default
 > `asyncpg` session pool. Supavisor (port `6543`) is supported as an alternative: the engine
 > bootstrap in `app/core/database.py` passes the extra kwargs that Supavisor requires.
 
-## Render service (outline — created in deploy-v1)
+## Railway service (outline — created in deploy-v1)
 
-1. Create per-env GitHub container registry integration and point Render at GitHub.
-2. New Web Service → type Docker → image `ghcr.io/lifelens/backend:<sha>`.
-3. Set the environment variables from the table above (all as encrypted values).
-4. Set the start command above; health check path `/healthz`.
-5. Add an HTTPS domain: `api-qa.lifelens.app` (QA), `api.lifelens.app` (PROD).
-6. Configure auto-deploy from the registry webhook.
-7. Optional: commit a `render.yaml` Blueprint for infrastructure-as-code in deploy-v1.
+1. Create a Railway project with two services: `lifelens-backend-qa` and `lifelens-backend-prod`.
+2. Attach each service to its Git branch (`qa` / `prod`), builder = Dockerfile (via `railway.toml`).
+3. Set the environment variables from the table above (all as Railway variables).
+4. Health check `/healthz` (already in `railway.toml`).
+5. Add HTTPS domains: `api-qa.lifelens.app` (QA), `api.lifelens.app` (PROD).
+6. Configure auto-deploys per branch.
 
 ## Verification
 
-- `/healthz` returns `200` with `environment` matching the deployment env.
+- `/healthz` returns `200` with `environment` matching the deployment env (`qa`/`prod`).
 - `APP_ENV` mismatch traps (e.g. QA service claiming `prod`) fail the health check review.
 - Lint (`ruff`), type checks (`mypy`), and tests (`pytest`) all green in CI before any deploy.
 - Changes reach production only through `prod` branch; the `qa` → `prod` promotion path is enforced
-  by branch protection (see `README.md`).
+  by branch protection (see `README.md`). Both environments share the same single project infra.

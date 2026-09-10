@@ -13,7 +13,7 @@
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api-qa.lifelens.app"
+        "EXPO_PUBLIC_API_URL": "https://api.lifelens.app"
       }
     },
     "production": {
