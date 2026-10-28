@@ -45,7 +45,11 @@ _SYSTEM_INSTRUCTION = (
     "IDENTIFICATION\n"
     "- Identify what is shown in simple, non-technical language.\n"
     "- If you are not confident, say so in the summary and keep risk_level at or above "
-    "MEDIUM rather than guessing LOW.\n\n"
+    "MEDIUM rather than guessing LOW.\n"
+    "- evidence must list the short, plain-language clues that are VISIBLE in the image "
+    "and that support your identification and risk call. Never list inferences, guesses, "
+    "or causes that are not visible. If you claim HIGH or CRITICAL risk, evidence must be "
+    "non-empty.\n\n"
     "SAFETY\n"
     "- risk_level must be one of LOW, MEDIUM, HIGH, CRITICAL and must be conservative: "
     "when in doubt, choose the higher level.\n"
@@ -469,6 +473,7 @@ class GeminiProvider:
             headline=_as_text(parsed.get("headline")),
             action=_as_text(parsed.get("action")),
             observations=_as_text_list(parsed.get("observations")),
+            evidence=_as_text_list(parsed.get("evidence")),
             actions=_as_text_list(parsed.get("actions")),
             warnings=_as_text_list(parsed.get("warnings")),
             when_to_seek_help=_as_optional_text(parsed.get("when_to_seek_help")),
@@ -571,6 +576,15 @@ _RESPONSE_SCHEMA: dict[str, Any] = {
             ),
         },
         "observations": {"type": "array", "items": {"type": "string"}},
+        "evidence": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": (
+                "Short, plain-language clues that are VISIBLE in the image and "
+                "support the identification and risk call. Never inferences. "
+                "MUST be non-empty when risk_level is HIGH or CRITICAL."
+            ),
+        },
         "actions": {"type": "array", "items": {"type": "string"}},
         "warnings": {"type": "array", "items": {"type": "string"}},
         "when_to_seek_help": {"type": ["string", "null"]},
@@ -585,6 +599,7 @@ _RESPONSE_SCHEMA: dict[str, Any] = {
         "headline",
         "action",
         "observations",
+        "evidence",
         "actions",
         "warnings",
         "when_to_seek_help",

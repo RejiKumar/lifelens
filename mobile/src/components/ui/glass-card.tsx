@@ -1,10 +1,8 @@
-import { BlurView } from 'expo-blur';
-import { StyleSheet, type ViewProps } from 'react-native';
 import type { ReactNode } from 'react';
+import { StyleSheet, type ViewProps } from 'react-native';
 
-import { Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
-import { useReducedMotion } from '@/features/scan/presentation/use-reduced-motion';
+import { GlassSurface } from '@/components/ui/glass-surface';
+import { Radius, Spacing } from '@/constants/theme';
 
 export interface GlassCardProps extends ViewProps {
   intensity?: number;
@@ -12,31 +10,16 @@ export interface GlassCardProps extends ViewProps {
   children: ReactNode;
 }
 
-export function GlassCard({
-  intensity = 30,
-  tint = 'systemChromeMaterial',
-  style,
-  children,
-  ...rest
-}: GlassCardProps) {
-  const theme = useTheme();
-  const reducedMotion = useReducedMotion();
-
+export function GlassCard({ intensity = 35, tint = 'systemChromeMaterial', style, children, ...rest }: GlassCardProps) {
   return (
-    <BlurView
-      intensity={reducedMotion ? 100 : intensity}
-      tint={tint}
-      style={[styles.card, style]}
-      {...rest}>
+    <GlassSurface intensity={intensity} tint={tint} radius={Radius.featured} shaded style={[styles.card, style]} {...rest}>
       {children}
-    </BlurView>
+    </GlassSurface>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 24,
-    overflow: 'hidden',
     padding: Spacing.four,
   },
 });

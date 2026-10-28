@@ -22,6 +22,7 @@ const sampleResult: ScanResponse = {
     confidence: 0.9,
     risk_level: 'LOW',
     observations: [],
+    evidence: [],
     actions: [],
     warnings: [],
     when_to_seek_help: null,

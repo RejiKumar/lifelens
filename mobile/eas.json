@@ -7,19 +7,25 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://localhost:8000"
+        "EXPO_PUBLIC_API_URL": "http://localhost:8000",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://zcworxplrqaeymxmugtc.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_X4Sbo5MhjyRZS_uArR7c1Q_EIWvwaQ0"
       }
     },
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.lifelens.app"
+        "EXPO_PUBLIC_API_URL": "https://api.lifelens.app",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://zcworxplrqaeymxmugtc.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_X4Sbo5MhjyRZS_uArR7c1Q_EIWvwaQ0"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.lifelens.app"
+        "EXPO_PUBLIC_API_URL": "https://api.lifelens.app",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://zcworxplrqaeymxmugtc.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_X4Sbo5MhjyRZS_uArR7c1Q_EIWvwaQ0"
       }
     }
   },

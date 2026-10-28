@@ -285,6 +285,7 @@ def _analysis_payload(analysis: Analysis) -> dict[str, object]:
         "summary": analysis.summary,
         "risk_level": analysis.risk_level,
         "observations": analysis.observations,
+        "evidence": list(getattr(analysis, "evidence", []) or []),
         "actions": analysis.actions,
         "warnings": analysis.warnings,
         "when_to_seek_help": analysis.when_to_seek_help or "",

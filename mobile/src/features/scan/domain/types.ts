@@ -29,6 +29,7 @@ export interface AnalysisResult {
   confidence: number;
   risk_level: RiskLevel;
   observations: string[];
+  evidence: string[];
   actions: string[];
   warnings: string[];
   when_to_seek_help: string | null;

@@ -16,6 +16,7 @@ const baseAnalysis = {
   confidence: 0.9,
   risk_level: 'LOW' as const,
   observations: [],
+  evidence: [],
   actions: [],
   warnings: [],
   when_to_seek_help: null,
@@ -67,6 +68,10 @@ jest.mock('@/features/scan/presentation/scan-context', () => ({
 
 jest.mock('@/features/scan/presentation/use-conversation', () => ({
   useConversation: jest.fn(),
+}));
+
+jest.mock('@/features/auth/presentation/auth-context', () => ({
+  useAuth: jest.fn(() => ({ state: 'authenticated' })),
 }));
 
 const mockedUseScanFlow = jest.mocked(useScanFlow);
@@ -242,5 +247,72 @@ describe('AnalysisScreen', () => {
     );
     const { queryByLabelText } = await renderScreen();
     expect(queryByLabelText('Send question')).toBeNull();
+  });
+
+  it('renders a confidence indicator with a plain-language label', async () => {
+    mockedUseScanFlow.mockReturnValue(contextValue(lowResult));
+    const { getByLabelText } = await renderScreen();
+    expect(getByLabelText(/Confidence: 90 percent, high confidence/i)).toBeTruthy();
+  });
+
+  it('shows the honesty callout below the confidence threshold', async () => {
+    mockedUseScanFlow.mockReturnValue(
+      contextValue({ ...lowResult, analysis: { ...baseAnalysis, confidence: 0.4, evidence: [] } }),
+    );
+    const { getByLabelText, getByText } = await renderScreen();
+    expect(getByLabelText(/Confidence: 40 percent, low confidence/i)).toBeTruthy();
+    expect(getByText('Not fully certain')).toBeTruthy();
+  });
+
+  it('hides the honesty callout at or above the confidence threshold', async () => {
+    mockedUseScanFlow.mockReturnValue(contextValue(lowResult));
+    const { queryByText } = await renderScreen();
+    expect(queryByText('Not fully certain')).toBeNull();
+  });
+
+  it('renders evidence clues in a labeled section', async () => {
+    mockedUseScanFlow.mockReturnValue(
+      contextValue({
+        ...lowResult,
+        analysis: {
+          ...baseAnalysis,
+          evidence: ['Smooth curved surface visible.', 'Small object on a table.'],
+        },
+      }),
+    );
+    const { getByText } = await renderScreen();
+    expect(getByText('Evidence')).toBeTruthy();
+    expect(getByText(/Smooth curved surface visible/i)).toBeTruthy();
+    expect(getByText(/Small object on a table/i)).toBeTruthy();
+  });
+
+  it('renders evidence prominently above the summary for HIGH risk', async () => {
+    mockedUseScanFlow.mockReturnValue(
+      contextValue({
+        ...highResult,
+        analysis: { ...highResult.analysis!, evidence: ['Broken glass visible.'] },
+      }),
+    );
+    const { getByText, toJSON } = await renderScreen();
+    expect(getByText('Why LifeLens flagged this')).toBeTruthy();
+    const json = toJSON();
+    const evidencePos = JSON.stringify(json).indexOf('Why LifeLens flagged this');
+    const summaryPos = JSON.stringify(json).indexOf('What it is');
+    expect(evidencePos).toBeGreaterThanOrEqual(0);
+    expect(summaryPos).toBeGreaterThanOrEqual(0);
+    expect(evidencePos).toBeLessThan(summaryPos);
+  });
+
+  it('tolerates a legacy analysis without evidence', async () => {
+    const legacyAnalysis: Omit<ScanResponse['analysis'], 'evidence'> & {
+      evidence?: string[];
+    } = baseAnalysis;
+    delete legacyAnalysis.evidence;
+    mockedUseScanFlow.mockReturnValue(
+      contextValue({ ...lowResult, analysis: legacyAnalysis } as ScanResponse),
+    );
+    const { getByLabelText, queryByText } = await renderScreen();
+    expect(getByLabelText(/Confidence: 90 percent/i)).toBeTruthy();
+    expect(queryByText('Evidence')).toBeNull();
   });
 });

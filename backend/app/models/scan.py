@@ -57,6 +57,7 @@ class Analysis(Base):
     )
     moment_action: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
     observations: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
+    evidence: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
     actions: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
     warnings: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
     when_to_seek_help: Mapped[str | None] = mapped_column(Text, nullable=True)

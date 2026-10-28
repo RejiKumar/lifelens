@@ -35,6 +35,8 @@ from app.services.quota import QuotaState
 
 _RETRY_BACKOFF = [1.0, 2.0, 4.0]
 
+_LOW_CONFIDENCE_WARNING = "Low confidence identification. Results may be inaccurate."
+
 
 class AI(Protocol):
     async def analyze_image(
@@ -236,10 +238,25 @@ class AnalysisService:
         if not headline or not action:
             raise AnalysisFailedError("Analysis returned an invalid result.")
         observations = _strings(getattr(raw, "observations", []), limit=20, minimum=1)
+        evidence = _strings(
+            getattr(raw, "evidence", []), limit=10, minimum=0, item_limit=300
+        )
         actions = _strings(getattr(raw, "actions", []), limit=10, minimum=0)
         warnings = _strings(getattr(raw, "warnings", []), limit=10, minimum=0)
         when = str(getattr(raw, "when_to_seek_help", "") or "")[:1000] or None
         follow_ups = _strings(getattr(raw, "follow_up_suggestions", []), limit=5, minimum=0)
+
+        if confidence < 0.3 and risk in (RiskLevel.LOW, RiskLevel.MEDIUM):
+            risk = RiskLevel.MEDIUM
+        if confidence < 0.5:
+            warnings = [_LOW_CONFIDENCE_WARNING] + [
+                w for w in warnings if w != _LOW_CONFIDENCE_WARNING
+            ]
+            warnings = warnings[:10]
+        if risk in (RiskLevel.HIGH, RiskLevel.CRITICAL) and not evidence:
+            raise AnalysisFailedError(
+                "The analysis could not be verified. Please try again with a clearer image."
+            )
 
         record = AnalysisRecord(
             title=title,
@@ -250,6 +267,7 @@ class AnalysisService:
             moment_headline=headline,
             moment_action=action,
             observations=observations,
+            evidence=evidence,
             actions=actions,
             warnings=warnings,
             when_to_seek_help=when,
@@ -263,6 +281,7 @@ class AnalysisService:
             risk_level=risk,
             moment=Moment(headline=headline, action=action),
             observations=observations,
+            evidence=evidence,
             actions=actions,
             warnings=warnings,
             when_to_seek_help=when,
@@ -306,6 +325,7 @@ class AnalysisService:
                     headline=analysis.moment_headline, action=analysis.moment_action
                 ),
                 observations=analysis.observations,
+                evidence=list(getattr(analysis, "evidence", []) or []),
                 actions=analysis.actions,
                 warnings=analysis.warnings,
                 when_to_seek_help=analysis.when_to_seek_help,
@@ -411,10 +431,12 @@ def _coerce_risk(value: object) -> RiskLevel:
         return RiskLevel.LOW
 
 
-def _strings(values: object, *, limit: int, minimum: int) -> list[str]:
+def _strings(
+    values: object, *, limit: int, minimum: int, item_limit: int = 500
+) -> list[str]:
     if not isinstance(values, list):
         values = []
-    out = [str(v).strip()[:500] for v in values[:limit]]
+    out = [str(v).strip()[:item_limit] for v in values[:limit]]
     out = [v for v in out if v]
     if len(out) < minimum:
         out = out[:0] + ["Details are not available for this item."] * (minimum - len(out))

@@ -1,8 +1,9 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
-import { ThemedText } from '@/components/themed-text';
 import { GlassCard } from '@/components/ui/glass-card';
-import { Spacing } from '@/constants/theme';
+import { PressableScale } from '@/components/ui/micro-motion';
+import { Typography } from '@/components/ui/typography';
+import { Radius, Size, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 export interface AskLifeLensCardProps {
@@ -19,16 +20,16 @@ export function AskLifeLensCard({ suggestions, onAsk, disabled = false }: AskLif
 
   return (
     <GlassCard style={styles.card}>
-      <ThemedText type="smallBold" themeColor="textSecondary" style={styles.eyebrow}>
+      <Typography variant="caption" themeColor="accent" style={styles.eyebrow}>
         ASK LIFELENS
-      </ThemedText>
-      <ThemedText type="subtitle" accessibilityRole="header" style={styles.headline}>
+      </Typography>
+      <Typography variant="title" accessibilityRole="header">
         Ask about what you see
-      </ThemedText>
-      <ThemedText type="default" themeColor="textSecondary">
+      </Typography>
+      <Typography variant="body" themeColor="textSecondary">
         I can answer follow-up questions about this scan. Each question counts toward your daily
         AI limit.
-      </ThemedText>
+      </Typography>
 
       {chips.length > 0 && (
         <View style={styles.chips} accessibilityRole="none">
@@ -57,22 +58,21 @@ function PressableChip({
 }) {
   const theme = useTheme();
   return (
-    <Pressable
+    <PressableScale
       accessibilityRole="button"
       accessibilityLabel={`Ask: ${label}`}
       accessibilityHint="Submits this question about the scan"
       disabled={disabled}
       onPress={onPress}
-      style={({ pressed }) => [
+      style={[
         styles.chip,
-        { backgroundColor: theme.surface, borderColor: theme.backgroundElement },
-        pressed && !disabled && styles.chipPressed,
+        { backgroundColor: theme.accent + '1F', borderColor: theme.accent + '55' },
         disabled && styles.chipDisabled,
       ]}>
-      <ThemedText type="small" style={styles.chipText}>
+      <Typography variant="caption" style={styles.chipText}>
         {label}
-      </ThemedText>
-    </Pressable>
+      </Typography>
+    </PressableScale>
   );
 }
 
@@ -83,10 +83,6 @@ const styles = StyleSheet.create({
   eyebrow: {
     letterSpacing: 2,
   },
-  headline: {
-    fontSize: 24,
-    lineHeight: 32,
-  },
   chips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -94,18 +90,15 @@ const styles = StyleSheet.create({
     marginTop: Spacing.two,
   },
   chip: {
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 999,
-    paddingVertical: Spacing.two,
-    paddingHorizontal: Spacing.three,
-    minHeight: 44,
+    paddingVertical: Size.md,
+    paddingHorizontal: Size.lg,
+    minHeight: Size.huge,
     justifyContent: 'center',
   },
-  chipPressed: {
-    opacity: 0.7,
-  },
   chipDisabled: {
-    opacity: 0.5,
+    opacity: 0.45,
   },
   chipText: {
     maxWidth: 280,

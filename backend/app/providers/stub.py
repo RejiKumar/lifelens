@@ -41,6 +41,10 @@ class StubProvider:
                 "The object appears intact and in normal condition.",
                 "No visible damage or unusual markings were detected.",
             ],
+            evidence=[
+                "The object has a consistent, undamaged outer surface.",
+                "No cracks, leaks, or exposed parts are visible.",
+            ],
             actions=[
                 "No immediate action is required.",
             ],

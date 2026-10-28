@@ -34,6 +34,7 @@ class AnalysisRecord:
     moment_headline: str
     moment_action: str
     observations: list[str] = field(default_factory=list)
+    evidence: list[str] = field(default_factory=list)
     actions: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     when_to_seek_help: str | None = None
@@ -164,6 +165,7 @@ class AnalysisRepository:
             moment_headline=analysis.moment_headline,
             moment_action=analysis.moment_action,
             observations=analysis.observations,
+            evidence=analysis.evidence,
             actions=analysis.actions,
             warnings=analysis.warnings,
             when_to_seek_help=analysis.when_to_seek_help,
@@ -217,6 +219,7 @@ class AnalysisRepository:
         row.moment_headline = analysis.moment_headline
         row.moment_action = analysis.moment_action
         row.observations = analysis.observations
+        row.evidence = analysis.evidence
         row.actions = analysis.actions
         row.warnings = analysis.warnings
         row.when_to_seek_help = analysis.when_to_seek_help

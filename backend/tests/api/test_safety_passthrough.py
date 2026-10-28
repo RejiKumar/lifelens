@@ -17,6 +17,7 @@ def _raw_with(risk: str) -> RawAnalysis:
         headline="Exposed wiring means do not use it until it's repaired.",
         action="Unplug it now and do not power it on until a professional fixes it.",
         observations=["Exposed copper wiring is visible."],
+        evidence=["Exposed copper wiring is visible."],
         actions=[],
         warnings=["Do not touch with wet hands."],
         when_to_seek_help="Turn off power and call an electrician if sparks occur.",

@@ -12,6 +12,7 @@ import type {
   SignedUrlResponse,
 } from '../domain/types';
 import { type LifeLensError, toLifeLensError, errorFromEnvelope, clientError } from '../domain/errors';
+import { authorizedFetch } from '@/features/auth/data/authorized-fetch';
 
 const DEFAULT_API_URL = 'http://localhost:8000';
 export const API_URL = (process.env.EXPO_PUBLIC_API_URL?.replace(/\/+$/, '') || DEFAULT_API_URL);
@@ -23,7 +24,6 @@ export interface UploadInput {
   image: NormalizedImage;
   idempotencyKey: string;
   source: ScanSource;
-  sessionId: string;
   signal?: AbortSignal;
   contentHash: string;
 }
@@ -31,9 +31,8 @@ export interface UploadInput {
 export async function uploadScan(input: UploadInput): Promise<ScanResponse> {
   return retryRequest(async (signal) => {
     const form = await buildFormData(input);
-    const response = await fetch(`${API_URL}/scan/analyze`, {
+    const response = await authorizedFetch(`${API_URL}/scan/analyze`, {
       method: 'POST',
-      headers: { 'x-guest-session': input.sessionId },
       body: form,
       signal,
     });
@@ -45,13 +44,11 @@ export async function uploadScan(input: UploadInput): Promise<ScanResponse> {
 
 export async function fetchScanById(
   scanId: string,
-  sessionId: string,
   signal?: AbortSignal,
 ): Promise<ScanResponse> {
   return retryRequest(async (reqSignal) => {
-    const response = await fetch(`${API_URL}/scan/${encodeURIComponent(scanId)}`, {
+    const response = await authorizedFetch(`${API_URL}/scan/${encodeURIComponent(scanId)}`, {
       method: 'GET',
-      headers: { 'x-guest-session': sessionId },
       signal: reqSignal,
     });
     const payload = await parsePayload(response);
@@ -60,14 +57,10 @@ export async function fetchScanById(
   }, signal);
 }
 
-export async function fetchSignedUrlById(
-  scanId: string,
-  sessionId: string,
-): Promise<SignedUrlResponse> {
+export async function fetchSignedUrlById(scanId: string): Promise<SignedUrlResponse> {
   const response = await withTimeout((signal) =>
-    fetch(`${API_URL}/scan/${encodeURIComponent(scanId)}/signed-url`, {
+    authorizedFetch(`${API_URL}/scan/${encodeURIComponent(scanId)}/signed-url`, {
       method: 'GET',
-      headers: { 'x-guest-session': sessionId },
       signal,
     }),
   );
@@ -79,15 +72,14 @@ export async function fetchSignedUrlById(
 export async function postFollowUp(
   analysisId: string,
   question: string,
-  sessionId: string,
   signal?: AbortSignal,
 ): Promise<FollowUpResponse> {
   return retryRequest(async (reqSignal) => {
-    const response = await fetch(
+    const response = await authorizedFetch(
       `${API_URL}/analysis/${encodeURIComponent(analysisId)}/follow-up`,
       {
         method: 'POST',
-        headers: { 'x-guest-session': sessionId, 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ question }),
         signal: reqSignal,
       },
@@ -105,7 +97,6 @@ export interface ChatHistoryParams {
 
 export async function fetchChatHistory(
   analysisId: string,
-  sessionId: string,
   params: ChatHistoryParams = {},
   signal?: AbortSignal,
 ): Promise<ChatHistoryResponse> {
@@ -117,9 +108,8 @@ export async function fetchChatHistory(
     const url = `${API_URL}/analysis/${encodeURIComponent(analysisId)}/chat-history${
       queryString ? `?${queryString}` : ''
     }`;
-    const response = await fetch(url, {
+    const response = await authorizedFetch(url, {
       method: 'GET',
-      headers: { 'x-guest-session': sessionId },
       signal: reqSignal,
     });
     const payload = await parsePayload(response);
@@ -134,7 +124,6 @@ export interface HistoryParams {
 }
 
 export async function fetchScanHistory(
-  sessionId: string,
   params: HistoryParams = {},
   signal?: AbortSignal,
 ): Promise<HistoryResponse> {
@@ -144,9 +133,8 @@ export async function fetchScanHistory(
     if (params.offset != null) query.set('offset', String(params.offset));
     const queryString = query.toString();
     const url = `${API_URL}/scan/history${queryString ? `?${queryString}` : ''}`;
-    const response = await fetch(url, {
+    const response = await authorizedFetch(url, {
       method: 'GET',
-      headers: { 'x-guest-session': sessionId },
       signal: reqSignal,
     });
     const payload = await parsePayload(response);

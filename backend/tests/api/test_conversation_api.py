@@ -298,11 +298,17 @@ def _client_with(service: ConversationService) -> TestClient:
     return TestClient(app)
 
 
+def _anonymous_headers(session: str) -> dict[str, str]:
+    from tests.jwt_support import bearer_header
+
+    return bearer_header(session, is_anonymous=True)
+
+
 def _follow_up(client: TestClient, analysis_id: uuid.UUID, question: str) -> object:
     return client.post(
         f"/analysis/{analysis_id}/follow-up",
         json={"question": question},
-        headers={"x-guest-session": _session_A},
+        headers=_anonymous_headers(_session_A),
     )
 
 
@@ -310,7 +316,7 @@ def _history(client: TestClient, analysis_id: uuid.UUID, **params: str) -> objec
     return client.get(
         f"/analysis/{analysis_id}/chat-history",
         params=params,
-        headers={"x-guest-session": _session_A},
+        headers=_anonymous_headers(_session_A),
     )
 
 
@@ -372,7 +378,7 @@ def test_foreign_session_cannot_read_analysis() -> None:
         resp = client.post(
             f"/analysis/{analysis_id}/follow-up",
             json={"question": "hello"},
-            headers={"x-guest-session": _session_B},
+            headers=_anonymous_headers(_session_B),
         )
         assert resp.status_code == 404
         assert resp.json()["error"]["code"] == "NOT_FOUND"

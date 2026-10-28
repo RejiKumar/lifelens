@@ -60,6 +60,25 @@ is backend-only: never expose it to the mobile client, log it, print it, or comm
 5. Add HTTPS domains: `api-qa.lifelens.app` (QA), `api.lifelens.app` (PROD).
 6. Configure auto-deploys per branch.
 
+## Mobile build environment (EAS)
+
+The mobile app reads these `EXPO_PUBLIC_*` values at build time (`eas.json` profiles) and runs with
+the shared single Supabase project:
+
+| Variable | Value source | Notes |
+|---|---|---|
+| `EXPO_PUBLIC_API_URL` | `eas.json` profile / local `.env` | QA and PROD API URLs |
+| `EXPO_PUBLIC_SUPABASE_URL` | shared Supabase project URL | Same across QA and PROD |
+| `EXPO_PUBLIC_SUPABASE_ANON_KEY` | `sb_publishable_…` (publishable key) | **Client-safe** by design; same across QA and PROD; never use the service role key here |
+
+- No new Supabase project or credential pair is introduced for mobile — the anon/publishable key is
+  the public, client-side key of the single shared project (`environments.md` §3.4).
+- The Supabase URL and publishable key are the same for every EAS profile; only `EXPO_PUBLIC_API_URL`
+  differs per environment.
+- Local development: copy `mobile/.env.example` to `mobile/.env` and fill in the real values. `.env*`
+  files are gitignored; templates (`mobile/.env.example`, `.env.qa.example`, `.env.prod.example`) are
+  committed with empty values.
+
 ## Verification
 
 - `/healthz` returns `200` with `environment` matching the deployment env (`qa`/`prod`).

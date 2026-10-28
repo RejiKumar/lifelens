@@ -19,7 +19,8 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "softwareKeyboardLayoutMode": "resize"
     },
     "web": {
       "output": "static",
@@ -36,6 +37,14 @@
         }
       ],
       "expo-secure-store",
+      [
+        "expo-system-ui",
+        {
+          "android": {
+            "backgroundColor": "#0A0A0F"
+          }
+        }
+      ],
       [
         "expo-camera",
         {

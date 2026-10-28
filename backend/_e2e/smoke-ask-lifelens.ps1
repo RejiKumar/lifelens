@@ -1,7 +1,9 @@
 param(
     [string]$BaseUrl = "http://127.0.0.1:8000",
     [string]$Image = "backend\_e2e\lifelens_home_small.png",
-    [string]$GuestSession = ""
+    [string]$SupabaseUrl = $env:SUPABASE_URL,
+    [string]$SupabaseAnonKey = $env:SUPABASE_ANON_KEY,
+    [string]$Bearer = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -9,8 +11,16 @@ $ProgressPreference = "SilentlyContinue"
 $tmp = Join-Path $env:TEMP "lifelens_smoke"
 New-Item -ItemType Directory -Force -Path $tmp | Out-Null
 
-if (-not $GuestSession) {
-    $GuestSession = [guid]::NewGuid().ToString("N")
+if (-not $Bearer) {
+    if (-not $SupabaseUrl -or -not $SupabaseAnonKey) {
+        throw "Provide -Bearer, or set SUPABASE_URL/SUPABASE_ANON_KEY to mint an anonymous JWT"
+    }
+    $token = & curl.exe -s -X POST "$SupabaseUrl/auth/v1/signup" `
+        -H "apikey: $SupabaseAnonKey" `
+        -H "Content-Type: application/json" `
+        -d '{"data":{"is_anonymous":true}}' 2>$null | ConvertFrom-Json
+    if (-not $token.access_token) { throw "Failed to create anonymous Supabase session" }
+    $Bearer = "Bearer $($token.access_token)"
 }
 
 function Invoke-Curl {
@@ -28,13 +38,13 @@ function Assert-True {
 }
 
 Write-Host "== LifeLens Ask LifeLens stub smoke =="
-Write-Host "Guest session: $GuestSession"
+Write-Host "Bearer: $($Bearer.Substring(0, [Math]::Min(20, $Bearer.Length)))…"
 
 Write-Host "1. Scan upload + analyze"
 $idem = [guid]::NewGuid().ToString("N")
 $scanBody = Join-Path $tmp "scan.json"
 Invoke-Curl -Arguments @("-s", "-X", "POST", "$BaseUrl/scan/analyze",
-    "-H", "x-guest-session: $GuestSession",
+    "-H", "Authorization: $Bearer",
     "-F", "image=@$Image",
     "-F", "idempotency_key=$idem",
     "-F", "source=camera",
@@ -54,7 +64,7 @@ $bodyFile = Join-Path $tmp "turn$i.json"
     $body = @{ question = "Tell me more about what I am looking at (turn $i). How should I handle it?" } | ConvertTo-Json
     Set-Content -Path $bodyFile -Value $body -Encoding utf8
     Invoke-Curl -Arguments @("-s", "-X", "POST", "$BaseUrl/analysis/$analysisId/follow-up",
-        "-H", "x-guest-session: $GuestSession",
+        "-H", "Authorization: $Bearer",
         "-H", "Content-Type: application/json",
         "-d", "@$bodyFile",
         "-o", $bodyFile,
@@ -79,7 +89,7 @@ Assert-True ($lastQuota.used -ge 5) "quota reflected on last success (used=$($la
 Write-Host "3. Chat-history restore"
 $hist = Join-Path $tmp "history.json"
 Invoke-Curl -Arguments @("-s", "$BaseUrl/analysis/$analysisId/chat-history",
-    "-H", "x-guest-session: $GuestSession",
+    "-H", "Authorization: $Bearer",
     "-o", $hist) | Out-Null
 $history = Get-Content $hist -Raw | ConvertFrom-Json
 $turnCount = $round - 1

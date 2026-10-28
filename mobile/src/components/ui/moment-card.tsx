@@ -1,7 +1,7 @@
 import { StyleSheet, View } from 'react-native';
 
-import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { Typography } from '@/components/ui/typography';
+import { Radius, Size, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 export interface MomentCardProps {
@@ -18,20 +18,23 @@ export function MomentCard({ headline, action }: MomentCardProps) {
     <View
       accessible
       accessibilityLabel={`Moment: ${headline}. ${action}.`}
-      style={[styles.card, styles.cardAccent]}>
-      <View style={styles.overlay} />
-      <ThemedText type="smallBold" themeColor="textSecondary" style={styles.eyebrow}>
+      style={[
+        styles.card,
+        { borderColor: theme.hairline, backgroundColor: theme.glassTint, shadowColor: theme.shadow },
+      ]}>
+      <View style={[styles.orb, { backgroundColor: theme.accent }]} />
+      <Typography variant="caption" themeColor="accent" style={styles.eyebrow}>
         MOMENT
-      </ThemedText>
-      <ThemedText type="title" accessibilityRole="header" style={styles.headline}>
+      </Typography>
+      <Typography variant="largeTitle" accessibilityRole="header" style={styles.headline}>
         {headline}
-      </ThemedText>
-      <View style={styles.divider} />
+      </Typography>
+      <View style={[styles.divider, { backgroundColor: theme.hairline }]} />
       <View style={styles.actionRow}>
-        <View style={styles.actionDot} />
-        <ThemedText type="default" style={styles.action}>
+        <View style={[styles.actionDot, { backgroundColor: theme.accent }]} />
+        <Typography variant="body" style={styles.action}>
           {action}
-        </ThemedText>
+        </Typography>
       </View>
     </View>
   );
@@ -41,32 +44,33 @@ const styles = StyleSheet.create({
   card: {
     position: 'relative',
     overflow: 'hidden',
-    borderRadius: 24,
+    borderRadius: Radius.featured,
+    borderWidth: StyleSheet.hairlineWidth,
     padding: Spacing.four,
     paddingVertical: Spacing.five,
     gap: Spacing.three,
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 6,
   },
-  cardAccent: {
-    backgroundColor: '#3B82F626',
-  },
-  overlay: {
+  orb: {
     position: 'absolute',
-    top: -40,
-    right: -40,
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: '#3B82F6AA',
+    top: -Size.xxl,
+    right: -Size.xxl,
+    width: Size.xxxl * 4,
+    height: Size.xxxl * 4,
+    borderRadius: Size.xxxl * 2,
+    opacity: 0.16,
   },
   eyebrow: {
     letterSpacing: 2,
   },
   headline: {
-    lineHeight: 48,
+    lineHeight: 38,
   },
   divider: {
-    height: 1,
-    backgroundColor: '#3B82F655',
+    height: StyleSheet.hairlineWidth,
   },
   actionRow: {
     flexDirection: 'row',
@@ -74,10 +78,9 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
   },
   actionDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#3B82F6',
+    width: Size.sm,
+    height: Size.sm,
+    borderRadius: Size.xs,
   },
   action: {
     flex: 1,

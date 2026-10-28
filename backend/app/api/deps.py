@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
 from app.core.database import get_session_factory
-from app.core.identity import AuthVerifier, GuestVerifier, Identity
+from app.core.identity import AuthVerifier, Identity, SupabaseJWTVerifier
 from app.providers.base import AIProvider
 from app.providers.gemini import GeminiProvider
 from app.providers.stub import StubProvider
@@ -38,16 +38,15 @@ async def get_db_session() -> AsyncGenerator[AsyncSession]:
             raise
 
 
-def get_verifier() -> AuthVerifier:
-    return GuestVerifier()
+def get_verifier(settings: Settings = Depends(get_settings)) -> AuthVerifier:
+    return SupabaseJWTVerifier(supabase_url=settings.supabase_url)
 
 
 async def get_identity(
     authorization: str | None = Header(default=None),
-    x_guest_session: str | None = Header(default=None),
     verifier: AuthVerifier = Depends(get_verifier),
 ) -> Identity:
-    return await verifier.verify(authorization, x_guest_session)
+    return await verifier.verify(authorization)
 
 
 def get_provider(settings: Settings = Depends(get_settings)) -> AIProvider:

@@ -70,6 +70,7 @@ class FakeAnalysis:
     moment_headline: str = ""
     moment_action: str = ""
     observations: list[str] = field(default_factory=list)
+    evidence: list[str] = field(default_factory=list)
     actions: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     when_to_seek_help: str | None = None
@@ -176,6 +177,7 @@ class FakeAnalysisRepo:
             moment_headline=analysis.moment_headline,
             moment_action=analysis.moment_action,
             observations=list(analysis.observations),
+            evidence=list(analysis.evidence),
             actions=list(analysis.actions),
             warnings=list(analysis.warnings),
             when_to_seek_help=analysis.when_to_seek_help,
@@ -205,6 +207,7 @@ class FakeAnalysisRepo:
             row.moment_headline = analysis.moment_headline
             row.moment_action = analysis.moment_action
             row.observations = list(analysis.observations)
+            row.evidence = list(analysis.evidence)
             row.actions = list(analysis.actions)
             row.warnings = list(analysis.warnings)
             row.when_to_seek_help = analysis.when_to_seek_help
@@ -217,6 +220,17 @@ class FakeAnalysisRepo:
             row.is_chemical = analysis.is_chemical
             row.is_gas = analysis.is_gas
         self._rows[scan_id] = row
+
+    async def list_by_owner(
+        self,
+        *,
+        owner: str | None,
+        is_guest: bool,
+        limit: int = 20,
+        offset: int = 0,
+        analyses: dict[uuid.UUID, FakeAnalysis] | None = None,
+    ) -> list[tuple[FakeAnalysis, FakeScan]]:
+        return []
 
 
 class FakeStorage:
@@ -274,6 +288,7 @@ class MomentlessProvider:
             headline="",
             action="",
             observations=raw.observations,
+            evidence=raw.evidence,
             actions=raw.actions,
             warnings=raw.warnings,
             when_to_seek_help=raw.when_to_seek_help,
@@ -310,12 +325,18 @@ def _build_service(
     return service, scans, analyses, storage, provider
 
 
+def _anonymous_headers(session: str) -> dict[str, str]:
+    from tests.jwt_support import bearer_header
+
+    return bearer_header(session, is_anonymous=True)
+
+
 def _upload(client: TestClient, payload: bytes, session: str, key: str = "k-1") -> object:
     return client.post(
         "/scan/analyze",
         data={"idempotency_key": key, "source": ScanSource.camera.value},
         files={"image": ("photo.jpg", payload, "image/jpeg")},
-        headers={"x-guest-session": session},
+        headers=_anonymous_headers(session),
     )
 
 
@@ -355,9 +376,11 @@ def test_get_scan_replays_persisted_moment() -> None:
         created = _upload(client, _jpeg_bytes(), "guest-A", key="replay-moment-1")
         assert created.status_code == 200
         scan_id = created.json()["id"]
-        fetched = client.get(f"/scan/{scan_id}", headers={"x-guest-session": "guest-A"})
+        assert len(created.json()["analysis"]["evidence"]) >= 1
+        fetched = client.get(f"/scan/{scan_id}", headers=_anonymous_headers("guest-A"))
         assert fetched.status_code == 200
         assert fetched.json()["analysis"]["moment"] == created.json()["analysis"]["moment"]
+        assert fetched.json()["analysis"]["evidence"] == created.json()["analysis"]["evidence"]
     finally:
         app.dependency_overrides.clear()
 
@@ -402,7 +425,7 @@ def test_empty_image_returns_400_envelope() -> None:
             "/scan/analyze",
             data={"idempotency_key": "k-empty", "source": "camera"},
             files={"image": ("empty.jpg", b"", "image/jpeg")},
-            headers={"x-guest-session": "guest-A"},
+            headers=_anonymous_headers("guest-A"),
         )
         assert resp.status_code == 400
         assert resp.json()["error"]["code"] == "VALIDATION_ERROR"
@@ -433,7 +456,7 @@ def test_unknown_scan_returns_404_envelope() -> None:
     try:
         resp = client.get(
             f"/scan/{uuid.uuid4()}",
-            headers={"x-guest-session": "guest-A"},
+            headers=_anonymous_headers("guest-A"),
         )
         assert resp.status_code == 404
         assert resp.json()["error"]["code"] == "NOT_FOUND"
@@ -534,7 +557,7 @@ def test_get_on_legacy_empty_moment_returns_analysis_failed() -> None:
         service._analyses._rows[scan_id].moment_headline = ""
         service._analyses._rows[scan_id].moment_action = ""
 
-        fetched = client.get(f"/scan/{scan_id}", headers={"x-guest-session": "guest-A"})
+        fetched = client.get(f"/scan/{scan_id}", headers=_anonymous_headers("guest-A"))
         assert fetched.status_code == 500
         assert fetched.json()["error"]["code"] == "ANALYSIS_FAILED"
     finally:

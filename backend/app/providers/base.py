@@ -70,6 +70,7 @@ class RawAnalysis:
     headline: str
     action: str
     observations: list[str]
+    evidence: list[str]
     actions: list[str]
     warnings: list[str]
     when_to_seek_help: str | None

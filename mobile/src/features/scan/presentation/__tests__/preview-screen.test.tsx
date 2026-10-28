@@ -59,6 +59,14 @@ jest.mock('@/features/scan/presentation/scan-context', () => ({
   useScanFlow: jest.fn(),
 }));
 
+jest.mock('@/features/auth/presentation/auth-prompts', () => ({
+  GuestLimitPrompt: () => null,
+}));
+
+jest.mock('@/features/auth/presentation/auth-context', () => ({
+  useAuth: jest.fn(() => ({ state: 'authenticated' })),
+}));
+
 const mockedUseScanFlow = jest.mocked(useScanFlow);
 
 const contextValue = (state: ScanFlowState) => ({

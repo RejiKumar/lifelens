@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
 
-import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { Typography } from '@/components/ui/typography';
+import { Radius, Size, Spacing } from '@/constants/theme';
 import type { ChatMessage } from '../domain/types';
 import { useTheme } from '@/hooks/use-theme';
 import { useReducedMotion } from './use-reduced-motion';
@@ -40,7 +40,9 @@ function MessageBubble({ message }: { message: ChatMessage }) {
 
   const bubbleStyle = [
     styles.bubble,
-    { backgroundColor: isUser ? theme.backgroundSelected : theme.surface },
+    isUser
+      ? { backgroundColor: theme.accent, borderColor: theme.accent }
+      : { backgroundColor: theme.glassTint, borderColor: theme.hairline },
     isUser ? styles.userBubble : styles.assistantBubble,
   ];
 
@@ -49,9 +51,9 @@ function MessageBubble({ message }: { message: ChatMessage }) {
       accessible
       accessibilityLabel={`${isUser ? 'You asked' : 'LifeLens answered'}: ${message.content}`}
       style={[bubbleStyle, { opacity }]}>
-      <ThemedText type="small" style={styles.messageText}>
+      <Typography variant="body" themeColor={isUser ? 'accentText' : 'text'} style={styles.messageText}>
         {message.content}
-      </ThemedText>
+      </Typography>
     </Animated.View>
   );
 }
@@ -61,18 +63,19 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
   },
   bubble: {
-    borderRadius: 18,
-    paddingVertical: Spacing.three,
-    paddingHorizontal: Spacing.three,
+    borderRadius: Radius.standard,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingVertical: Size.md,
+    paddingHorizontal: Size.lg,
   },
   userBubble: {
     alignSelf: 'flex-end',
-    borderTopRightRadius: 6,
+    borderTopRightRadius: Size.xs + Size.min,
     maxWidth: '85%',
   },
   assistantBubble: {
     alignSelf: 'flex-start',
-    borderTopLeftRadius: 6,
+    borderTopLeftRadius: Size.xs + Size.min,
     maxWidth: '85%',
   },
   messageText: {

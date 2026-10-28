@@ -1,6 +1,11 @@
 import { uploadScan, API_URL } from '@/features/scan/data/scan-api';
 import type { NormalizedImage } from '@/features/scan/domain/types';
 
+jest.mock('@/features/auth/data/token-provider', () => ({
+  getBearerHeaders: jest.fn(async () => ({ Authorization: 'Bearer tok-1' })),
+  refreshAccessTokenOrExpire: jest.fn(async () => null),
+}));
+
 const image: NormalizedImage = {
   uri: 'file:///a.jpg',
   name: 'a.jpg',
@@ -58,7 +63,6 @@ describe('uploadScan', () => {
       image,
       idempotencyKey: 'key-1',
       source: 'camera',
-      sessionId: 'sess-1',
       contentHash: 'abc',
     });
 
@@ -66,8 +70,8 @@ describe('uploadScan', () => {
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe(`${API_URL}/scan/analyze`);
     expect(init.method).toBe('POST');
-    const headers = init.headers as Record<string, string>;
-    expect(headers['x-guest-session']).toBe('sess-1');
+    const headers = init.headers as Headers;
+    expect(headers.get('Authorization')).toBe('Bearer tok-1');
     expect(init.body).toBeInstanceOf(FormData);
   });
 
@@ -81,7 +85,6 @@ describe('uploadScan', () => {
       image,
       idempotencyKey: 'key-1',
       source: 'camera',
-      sessionId: 'sess-1',
       contentHash: 'abc',
     });
 
@@ -95,7 +98,7 @@ describe('uploadScan', () => {
       .mockResolvedValue(jsonResponse({ error: { code: 'VALIDATION_ERROR' } }, 400));
 
     await expect(
-      uploadScan({ image, idempotencyKey: 'key-1', source: 'camera', sessionId: 's', contentHash: 'abc' }),
+      uploadScan({ image, idempotencyKey: 'key-1', source: 'camera', contentHash: 'abc' }),
     ).rejects.toMatchObject({ category: 'invalid_input', retryable: false, status: 400 });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -113,7 +116,6 @@ describe('uploadScan', () => {
         image,
         idempotencyKey: 'key-1',
         source: 'camera',
-        sessionId: 's',
         contentHash: 'abc',
         signal: controller.signal,
       }),

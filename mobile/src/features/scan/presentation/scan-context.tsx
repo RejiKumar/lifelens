@@ -4,7 +4,6 @@ import { type LifeLensError, toLifeLensError, clientError } from '@/features/sca
 import { scanFlowReducer, initialScanFlowState, type ScanFlowState } from '@/features/scan/domain/scan-state';
 import { normalizeImage, hashNormalizedImage } from '@/features/scan/data/image-normalizer';
 import { uploadScan, fetchScanById, newIdempotencyKey } from '@/features/scan/data/scan-api';
-import { getOrCreateGuestSessionId } from '@/features/scan/data/guest-session';
 import { scanStore } from './scan-store';
 import { analytics } from '@/features/scan/analytics';
 
@@ -78,7 +77,6 @@ export function ScanProvider({ children }: { children: ReactNode }) {
       }
 
       dispatch({ type: 'uploading' });
-      const sessionId = await getOrCreateGuestSessionId();
       const controller = new AbortController();
       abortRef.current = controller;
 
@@ -88,7 +86,6 @@ export function ScanProvider({ children }: { children: ReactNode }) {
           image: pending.image,
           idempotencyKey: pending.idempotencyKey,
           source: pending.image.source,
-          sessionId,
           contentHash: pending.contentHash,
           signal: controller.signal,
         });
@@ -124,8 +121,7 @@ export function ScanProvider({ children }: { children: ReactNode }) {
 
   const fetchResult = useCallback(async (scanId: string): Promise<ScanResponse | null> => {
     try {
-      const sessionId = await getOrCreateGuestSessionId();
-      return await fetchScanById(scanId, sessionId);
+      return await fetchScanById(scanId);
     } catch {
       return null;
     }

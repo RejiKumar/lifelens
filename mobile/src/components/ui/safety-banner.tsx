@@ -1,8 +1,6 @@
 import type { RiskLevel } from '@/features/scan/domain/types';
-import { RISK_COLORS } from '@/constants/theme';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Radius, RISK_COLORS, Size, Spacing } from '@/constants/theme';
+import { Typography } from '@/components/ui/typography';
 import { StyleSheet, View } from 'react-native';
 
 export interface SafetyBannerProps {
@@ -19,14 +17,20 @@ export function SafetyBanner({ riskLevel, isMedicine }: SafetyBannerProps) {
     <View
       accessibilityRole="alert"
       accessibilityLiveRegion="polite"
-      style={[styles.banner, { backgroundColor: isHighRisk ? RISK_COLORS[riskLevel] : RISK_COLORS[riskLevel] + '22' }]}>
-      <ThemedText type="smallBold" themeColor={isHighRisk ? 'text' : 'textSecondary'}>
+      style={[
+        styles.banner,
+        {
+          backgroundColor: isHighRisk ? RISK_COLORS[riskLevel] : RISK_COLORS[riskLevel] + '22',
+          borderColor: RISK_COLORS[riskLevel] + (isHighRisk ? '' : '55'),
+        },
+      ]}>
+      <Typography variant="subheadline" themeColor={isHighRisk ? 'text' : 'textSecondary'}>
         {riskLabel(riskLevel)}
-      </ThemedText>
+      </Typography>
       {isMedicine && (
-        <ThemedText type="small" themeColor="textSecondary">
+        <Typography variant="caption" themeColor="textSecondary">
           Not medical advice. Consult a healthcare professional.
-        </ThemedText>
+        </Typography>
       )}
     </View>
   );
@@ -48,7 +52,8 @@ function riskLabel(level: RiskLevel): string {
 const styles = StyleSheet.create({
   banner: {
     padding: Spacing.three,
-    borderRadius: 16,
-    gap: Spacing.one,
+    borderRadius: Radius.standard,
+    gap: Size.xs,
+    borderWidth: StyleSheet.hairlineWidth,
   },
 });

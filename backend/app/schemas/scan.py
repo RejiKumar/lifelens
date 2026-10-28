@@ -9,9 +9,14 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
+from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
+
+EvidenceItem = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)
+]
 
 
 class RiskLevel(StrEnum):
@@ -66,6 +71,7 @@ class AnalysisResult(BaseModel):
     risk_level: RiskLevel
     moment: Moment
     observations: list[str] = Field(min_length=1, max_length=20)
+    evidence: list[EvidenceItem] = Field(default_factory=list, max_length=10)
     actions: list[str] = Field(max_length=10)
     warnings: list[str] = Field(max_length=10)
     when_to_seek_help: str | None = Field(default=None, max_length=1000)

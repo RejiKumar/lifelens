@@ -4,7 +4,6 @@ import { AccessibilityInfo } from 'react-native';
 import type { ChatHistoryResponse, ChatMessage, QuotaInfo } from '../domain/types';
 import { type LifeLensError, toLifeLensError } from '../domain/errors';
 import { fetchChatHistory, postFollowUp } from '../data/scan-api';
-import { getOrCreateGuestSessionId } from '../data/guest-session';
 
 export type ConversationStatus = 'idle' | 'loading' | 'ready' | 'sending' | 'error';
 export type ConversationErrorKind = 'history' | 'send';
@@ -37,8 +36,7 @@ export function useConversation(analysisId: string | null | undefined): UseConve
     setLastError(null);
     setErrorKind(null);
     try {
-      const sessionId = await getOrCreateGuestSessionId();
-      const history: ChatHistoryResponse = await fetchChatHistory(analysisId, sessionId);
+      const history: ChatHistoryResponse = await fetchChatHistory(analysisId);
       setMessages(history.messages);
       setRemainingCapacity(history.remaining_capacity);
       setQuota(history.quota);
@@ -68,8 +66,7 @@ export function useConversation(analysisId: string | null | undefined): UseConve
       setLastError(null);
       setErrorKind(null);
       try {
-        const sessionId = await getOrCreateGuestSessionId();
-        const response = await postFollowUp(analysisId, trimmed, sessionId);
+        const response = await postFollowUp(analysisId, trimmed);
         setMessages((current) => [...current, response.message]);
         setRemainingCapacity(response.remaining_capacity);
         setQuota(response.quota);

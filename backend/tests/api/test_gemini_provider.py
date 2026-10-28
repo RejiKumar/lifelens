@@ -31,6 +31,7 @@ def _analysis_json() -> str:
             "headline": "The glass is shattered, so take care not to press on the cracks.",
             "action": "Put it in a case and have the screen replaced when convenient.",
             "observations": ["Cracked glass"],
+            "evidence": ["Cracked glass across the display"],
             "actions": ["Use a case"],
             "warnings": ["Sharp edges"],
             "when_to_seek_help": None,
@@ -73,14 +74,22 @@ async def test_happy_path_maps_raw_analysis_with_moment() -> None:
     assert isinstance(raw, RawAnalysis)
     assert raw.headline == "The glass is shattered, so take care not to press on the cracks."
     assert raw.action.startswith("Put it in a case")
+    assert raw.evidence == ["Cracked glass across the display"]
     assert captured["key"] == "test-key" and "generateContent" in captured["url"]
 
     body = captured["json"]
     schema = body["generationConfig"]["responseSchema"]
     assert body["generationConfig"]["responseMimeType"] == "application/json"
-    assert set(schema["required"]) >= {"title", "risk_level", "headline", "action"}
+    assert set(schema["required"]) >= {
+        "title",
+        "risk_level",
+        "headline",
+        "action",
+        "evidence",
+    }
     system = body["systemInstruction"]["parts"][0]["text"]
     assert "MOMENT" in system and "Never" in system and "risk_level" in system
+    assert "evidence" in system
     part = body["contents"][0]["parts"][0]["inlineData"]
     assert part["mimeType"] == "image/jpeg"
     assert part["data"] == base64.b64encode(b"\xff\xd8fake").decode("ascii")

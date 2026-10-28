@@ -5,11 +5,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ThemedText } from '@/components/themed-text';
+import { Typography } from '@/components/ui/typography';
 import { useScanFlow } from '@/features/scan/presentation/scan-context';
 import { analytics } from '@/features/scan/analytics';
 import { loadFlashPreference, saveFlashPreference } from '@/features/scan/data/flash-preference';
-import { Spacing } from '@/constants/theme';
+import { Radius, Size, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 const FLASH_LABELS: Record<FlashMode, string> = {
@@ -92,7 +92,7 @@ export default function CameraScreen() {
   if (!permission) {
     return (
       <View style={[styles.centered, { backgroundColor: theme.background }]}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={theme.accent} />
       </View>
     );
   }
@@ -100,18 +100,22 @@ export default function CameraScreen() {
   if (!permission.granted) {
     return (
       <View style={[styles.centered, { backgroundColor: theme.background }]}>
-        <ThemedText type="default" themeColor="textSecondary" style={styles.permissionMessage}>
+        <Typography variant="body" themeColor="textSecondary" align="center" style={styles.permissionMessage}>
           Camera permission is required to scan objects around you.
-        </ThemedText>
-        <Pressable onPress={requestPermission} style={styles.permissionButton}>
-          <ThemedText type="default" style={{ color: '#ffffff' }}>
+        </Typography>
+        <Pressable
+          onPress={requestPermission}
+          accessibilityRole="button"
+          accessibilityLabel="Grant camera permission"
+          style={({ pressed }) => [styles.permissionButton, { backgroundColor: theme.accent }, pressed && styles.pressed]}>
+          <Typography variant="subheadline" themeColor="accentText">
             Grant Permission
-          </ThemedText>
+          </Typography>
         </Pressable>
-        <Pressable onPress={dismiss} style={styles.dismissButton}>
-          <ThemedText type="default" themeColor="textSecondary">
+        <Pressable onPress={dismiss} accessibilityRole="button" accessibilityLabel="Go back" style={styles.dismissButton}>
+          <Typography variant="body" themeColor="textSecondary">
             Go Back
-          </ThemedText>
+          </Typography>
         </Pressable>
       </View>
     );
@@ -125,35 +129,35 @@ export default function CameraScreen() {
         <View style={styles.topControls}>
           <Pressable
             onPress={dismiss}
-            style={styles.closeButton}
+            style={[styles.chip, styles.closeButton]}
             accessibilityRole="button"
             accessibilityLabel="Close camera">
-            <ThemedText type="default" style={styles.closeText}>
+            <Typography variant="body" themeColor="onCamera">
               ✕
-            </ThemedText>
+            </Typography>
           </Pressable>
 
           <Pressable
             onPress={cycleFlash}
-            style={styles.flashButton}
+            style={styles.chip}
             accessibilityRole="button"
             accessibilityLabel={FLASH_LABELS[flash]}
             accessibilityState={{ selected: flash !== 'off' }}>
-            <ThemedText type="small" style={styles.flashText}>
+            <Typography variant="caption" themeColor="onCamera" align="center">
               {FLASH_LABELS[flash]}
-            </ThemedText>
+            </Typography>
           </Pressable>
         </View>
 
         <View style={styles.bottomControls}>
           <Pressable
             onPress={toggleFacing}
-            style={styles.flipButton}
+            style={styles.flipTouch}
             accessibilityRole="button"
             accessibilityLabel={facing === 'back' ? 'Switch to front camera' : 'Switch to back camera'}>
-            <ThemedText type="default" style={styles.flipText}>
+            <Typography variant="body" themeColor="onCamera">
               Flip
-            </ThemedText>
+            </Typography>
           </Pressable>
 
           <Pressable
@@ -169,21 +173,23 @@ export default function CameraScreen() {
             )}
           </Pressable>
 
-          <View style={styles.flipButton} />
+          <View style={styles.flipTouch} />
         </View>
       </View>
 
-      <View style={[styles.guideOverlay, { paddingTop: insets.top + Spacing.six }]}>
-        <ThemedText type="small" style={styles.guideText}>
-          Center the object in the frame
-        </ThemedText>
+      <View style={[styles.guideOverlay, { paddingTop: insets.top + Spacing.five }]}>
+        <View style={styles.guidePill}>
+          <Typography variant="caption" themeColor="onCamera" align="center">
+            Center the object in the frame
+          </Typography>
+        </View>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#000' },
+  root: { flex: 1, backgroundColor: '#000000' },
   camera: { flex: 1 },
   centered: {
     flex: 1,
@@ -194,12 +200,14 @@ const styles = StyleSheet.create({
   },
   permissionMessage: { textAlign: 'center' },
   permissionButton: {
-    backgroundColor: '#3B82F6',
-    paddingVertical: Spacing.three,
+    minHeight: Size.xxxl,
     paddingHorizontal: Spacing.five,
-    borderRadius: 12,
+    borderRadius: Radius.standard,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  dismissButton: { padding: Spacing.two },
+  dismissButton: { padding: Size.xl },
+  pressed: { opacity: 0.8 },
   overlay: {
     position: 'absolute',
     top: 0,
@@ -209,30 +217,25 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: Spacing.four,
   },
-  closeButton: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#00000066',
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  chip: {
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: Size.huge,
+    minWidth: Size.huge,
+    borderRadius: Radius.featured,
+    backgroundColor: 'rgba(17, 17, 19, 0.45)',
+    paddingHorizontal: Spacing.three,
   },
-  closeText: { color: '#ffffff', fontSize: 20, lineHeight: 22 },
+  closeButton: {
+    width: Size.huge,
+    paddingHorizontal: 0,
+  },
   topControls: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: Spacing.four,
+    gap: Spacing.three,
   },
-  flashButton: {
-    backgroundColor: '#00000066',
-    paddingHorizontal: Spacing.three,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  flashText: { color: '#ffffff', fontSize: 13, fontWeight: '600' },
   bottomControls: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -240,18 +243,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.four,
   },
   captureButton: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: Size.xhuge,
+    height: Size.xhuge,
+    borderRadius: Size.xxxl,
     borderWidth: 4,
     borderColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  captureInner: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#ffffff' },
-  flipButton: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
-  flipText: { color: '#ffffff', fontWeight: '600' },
-  pressed: { opacity: 0.8 },
+  captureInner: {
+    width: Size.huge,
+    height: Size.huge,
+    borderRadius: Size.xxxl,
+    backgroundColor: '#ffffff',
+  },
+  flipTouch: {
+    width: Size.xhuge,
+    height: Size.xhuge,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   guideOverlay: { position: 'absolute', top: 0, left: 0, right: 0, alignItems: 'center' },
-  guideText: { color: '#ffffffCC', backgroundColor: '#00000055', paddingHorizontal: Spacing.three, paddingVertical: Spacing.one, borderRadius: 12 },
+  guidePill: {
+    backgroundColor: 'rgba(17, 17, 19, 0.4)',
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Size.sm,
+    borderRadius: Radius.standard,
+  },
 });
